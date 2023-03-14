@@ -150,13 +150,22 @@ int bitXor(int x, int y) {
 /**
  * bitXor思路：
  * 首先 a ^ b = (a & ~b) | (~a & b)，考虑如何用 ~, & 表示 |
+ * 下面开始讨论如何表示a|b
  * |的二进制表示为
  * 0 0 0
  * 0 1 1
  * 1 0 1
  * 1 1 1
  * 
- * 
+ * 注意到，如果可以表示出
+ * 0 0 1
+ * 0 1 0
+ * 1 0 0
+ * 1 1 0
+ * 那么|也就可以表示了（取反即可）
+ * 这个位模式跟&非常像，只是对变量先取反再按位与即可，因此a|b可以表示为
+ * ~(~a & ~b)
+ * 用 (a &~b) 替换 a，(~a & b) 替换 b 即可
  * 
  */
 
@@ -168,9 +177,7 @@ int bitXor(int x, int y) {
  *   Rating: 1
  */
 int tmin(void) {
-
-  return 2;
-
+  return 1 << 31;
 }
 //2
 /*
@@ -181,8 +188,21 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  return 2;
+  return !(~(x + 1) ^ x) & !!(x + 1);
 }
+
+/**
+ * isTmax思路：
+ * 以4位举例，TMax为 0 1 1 1
+ * 这个数加一为 1 0 0 0
+ * 我们对 1 0 0 0 每一位均取反便可得到原数，因此只需要判断~(x + 1) == x是否成立即可
+ * 由于不能用等号，因此用异或代替，即!(~(x + 1) ^ x)
+ * 有一个例外情况是 -1，位表示为 1 1 1 1
+ * 显然，-1也是满足上述条件的，因此需要将x + 1 = 0这种情况排除掉
+ * 我们让所有x + 1 = 0的数变为0，让x + 1 != 0的数变为1，然后跟刚才的结果按位与即可
+ * 
+ */
+
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
  *   where bits are numbered from 0 (least significant) to 31 (most significant)
@@ -192,7 +212,10 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  return 2;
+  int a = 0xAA;
+  a |= a << 8;
+  a |= a << 16;
+  return !((x & a) ^ a);
 }
 /* 
  * negate - return -x 
@@ -202,7 +225,7 @@ int allOddBits(int x) {
  *   Rating: 2
  */
 int negate(int x) {
-  return 2;
+  return ~x + 1;
 }
 //3
 /* 
@@ -215,8 +238,21 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  return 2;
+  int a = !((x >> 4) ^ 0x3);
+  int b = ((x + 0x6) >> 4);
+  return a & b;
 }
+
+/**
+ * 这里重点在于对后4位的判断
+ * 后四位的范围要在0000到1001之间才符合题意
+ * 注意到，1001加上0110就可以得到4位的最大值
+ * 因此如果后四位大于1001，那么加上0110一定会造成进位，我们将进位位取出即可判断后四位是否在范围内
+ * 
+ */
+
+
+
 /* 
  * conditional - same as x ? y : z 
  *   Example: conditional(2,4,5) = 4
@@ -225,7 +261,9 @@ int isAsciiDigit(int x) {
  *   Rating: 3
  */
 int conditional(int x, int y, int z) {
-  return 2;
+  int a = !!x;
+  int b = ~a + 1;
+  return (y & b) + (z & ~b);
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
