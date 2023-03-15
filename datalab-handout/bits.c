@@ -273,7 +273,11 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  return 2;
+  int y_minus_x = y + (~x + 1);
+  int sign = y_minus_x >> 31;
+  int x_sign = x >> 31, y_sign = y >> 31;
+  int bitXor = (x_sign ^ y_sign) & 1;//这里必须要& 1，因为负数是算术右移
+  return ((!bitXor) & (!sign)) | (bitXor & x_sign);
 }
 //4
 /* 
@@ -285,7 +289,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return 2;
+  return ((x | (~x + 1)) >> 31) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -300,7 +304,21 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  return 0;
+  int bit_16, bit_8, bit_4, bit_2, bit_1;
+  int sign = x >> 31;
+  x = (x & ~sign) | (~x & sign);
+  //下面寻找x第一个1的位置
+  bit_16 = (!!(x >> 16)) << 4;//最少16位
+  x >>= bit_16;
+  bit_8 = (!!(x >> 8)) << 3;//最少8位
+  x >>= bit_8;
+  bit_4 = (!!(x >> 4)) << 2;//最少4位
+  x >>= bit_4;
+  bit_2 = (!!(x >> 2)) << 1;
+  x >>= bit_2;
+  bit_1 = (!!(x >> 1));
+  x >>= bit_1;
+  return bit_16 + bit_8 + bit_4 + bit_2 + bit_1 + x + 1;
 }
 //float
 /* 
