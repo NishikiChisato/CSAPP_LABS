@@ -212,10 +212,10 @@ int isTmax(int x) {
  *   Rating: 2
  */
 int allOddBits(int x) {
-  int a = 0xAA;
-  a |= a << 8;
-  a |= a << 16;
-  return !((x & a) ^ a);
+  int op = 0xAA;
+  op |= (op << 8);
+  op |= (op << 16);
+  return !((x & op) ^ op); 
 }
 /* 
  * negate - return -x 
@@ -238,9 +238,10 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-  int a = !((x >> 4) ^ 0x3);
-  int b = ((x + 0x6) >> 4);
-  return a & b;
+  int ahead = !((x >> 4) ^ 0x03);
+  int lower4Bits = x & 0xF;
+  int carry = lower4Bits + 0x06;
+  return ahead & !(carry >> 4);
 }
 
 /**
@@ -260,11 +261,15 @@ int isAsciiDigit(int x) {
  *   Max ops: 16
  *   Rating: 3
  */
+
+//x is 0, res is false; x is not 0, res is true
 int conditional(int x, int y, int z) {
-  int a = !!x;
-  int b = ~a + 1;
-  return (y & b) + (z & ~b);
+  int isZero = ~!x + 1;//x == 0 => [1...1], x == 1 => [0...0]
+  return (~isZero & y) + (isZero & z);
+
 }
+
+
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
  *   Example: isLessOrEqual(4,5) = 1.
@@ -273,12 +278,14 @@ int conditional(int x, int y, int z) {
  *   Rating: 3
  */
 int isLessOrEqual(int x, int y) {
-  int y_minus_x = y + (~x + 1);
-  int sign = y_minus_x >> 31;
-  int x_sign = x >> 31, y_sign = y >> 31;
-  int bitXor = (x_sign ^ y_sign) & 1;//这里必须要& 1，因为负数是算术右移
-  return ((!bitXor) & (!sign)) | (bitXor & x_sign);
+  int isEqual = !(x ^ y);
+  int sub = y - x;
+  int isBiggerZero = !(sub >> 31) & !!sub;
+  return isEqual | isBiggerZero;
 }
+
+
+
 //4
 /* 
  * logicalNeg - implement the ! operator, using all of 
@@ -289,7 +296,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  return ((x | (~x + 1)) >> 31) + 1;
+  
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -304,21 +311,7 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-  int bit_16, bit_8, bit_4, bit_2, bit_1;
-  int sign = x >> 31;
-  x = (x & ~sign) | (~x & sign);
-  //下面寻找x第一个1的位置
-  bit_16 = (!!(x >> 16)) << 4;//最少16位
-  x >>= bit_16;
-  bit_8 = (!!(x >> 8)) << 3;//最少8位
-  x >>= bit_8;
-  bit_4 = (!!(x >> 4)) << 2;//最少4位
-  x >>= bit_4;
-  bit_2 = (!!(x >> 2)) << 1;
-  x >>= bit_2;
-  bit_1 = (!!(x >> 1));
-  x >>= bit_1;
-  return bit_16 + bit_8 + bit_4 + bit_2 + bit_1 + x + 1;
+
 }
 //float
 /* 
