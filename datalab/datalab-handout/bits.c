@@ -296,7 +296,7 @@ int isLessOrEqual(int x, int y) {
  *   Rating: 4 
  */
 int logicalNeg(int x) {
-  
+  return ((x | (~x + 1)) >> 31) + 1;
 }
 /* howManyBits - return the minimum number of bits required to represent x in
  *             two's complement
@@ -311,7 +311,29 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
-
+  int sign = x >> 31;//positive will set to 0, and negative is 11...1
+  /*
+  If x <  0, its bit representation is 11...10...
+  If x >= 0, its bit representation is 00...01...
+  So, for negative num, we should find the first 0 on the far left and the res must plus 1
+  And for positive num, we shouble find the first 1 on the far left, and the res also plus 1
+  We consider turn negative num form into positive num form
+  */
+  x = x ^ sign;
+  //The follow code attempt to find the fitst 1 on far left， this process is like Binary search
+  int bit16, bit8, bit4, bit2, bit1, bit;
+  bit16 = !!(x >> 16) << 4;//at least 16 bits
+  x >>= bit16;
+  bit8 = !!(x >> 8) << 3;//at least 8 bits
+  x >>= bit8;
+  bit4 = !!(x >> 4) << 2;//at least 4 bits
+  x >>= bit4;
+  bit2 = !!(x >> 2) << 1;//at least 2 bits
+  x >>= bit2;
+  bit1 = !!(x >> 1);//at least 1 bits
+  x >>= bit1;
+  bit = x;
+  return bit16 + bit8 + bit4 + bit2 + bit1 + bit + 1;
 }
 //float
 /* 
@@ -326,7 +348,13 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+  unsigned ans = uf;
+  //normalizal
+  if((uf & 0x7f800000) != 0 && (uf & 0x7f800000) != 0x7f800000) ans += 0x00800000;
+  //denormalizal, move directly one bit to the left, notes the sign bits
+  //can not move directly to the left
+  else if((uf & 0x7f800000) == 0) ans = ((ans & 0x007fffff) << 1) | (ans & 0x80000000);
+  return ans;
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -341,7 +369,23 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+  if((uf & 0x7fffffff) == 0) return 0;
+  //go to get sign bits
+  int sign = uf >> 31;
+  int E, M;
+  
+  E = ((uf & 0x7f800000) >> 23) - 127, M = (uf & 0x007fffff) | 0x00800000;//get 1 + M (notes the position of 1)
+
+  if(E >= 31) return 0x80000000;
+  else if(E < 0) return 0;
+
+  //the number of the digit of the E is 23, so if E >= 32, M shoule muliple 2^(E - 23), M itself at least has 23 bits
+  if(E > 23) M <<= (E - 23);
+  else M >>= (23 - E);
+
+  //if the sign of uf is equal to the sign of M, return M, else return -M
+  if(sign ^ (M >> 31)) return ~M + 1;
+  else return M;
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -357,5 +401,8 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+
+  return 2;
+    
+
 }
