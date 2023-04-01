@@ -147,27 +147,31 @@ int bitXor(int x, int y) {
 }
 
 
-/**
- * bitXor思路：
- * 首先 a ^ b = (a & ~b) | (~a & b)，考虑如何用 ~, & 表示 |
- * 下面开始讨论如何表示a|b
- * |的二进制表示为
- * 0 0 0
- * 0 1 1
- * 1 0 1
- * 1 1 1
- * 
- * 注意到，如果可以表示出
- * 0 0 1
- * 0 1 0
- * 1 0 0
- * 1 1 0
- * 那么|也就可以表示了（取反即可）
- * 这个位模式跟&非常像，只是对变量先取反再按位与即可，因此a|b可以表示为
- * ~(~a & ~b)
- * 用 (a &~b) 替换 a，(~a & b) 替换 b 即可
- * 
- */
+/*
+  firstly, we know a ^ b is (~a & b) | (a & ~b)
+  so, our goal is make OR up by using Neg and AND
+  we know:
+  a b a & b   a b a | b
+  0 0   0     0 0   0
+  1 0   0     1 0   1
+  0 1   0     0 1   1
+  1 1   1     1 1   1
+
+  so if we use ~(a & b), we will get:
+  a b ~(a & b)
+  0 0     1
+  0 1     1
+  1 0     1
+  1 1     0
+
+  the next step is to exchange the first and the last, we use Neg, that's like:
+  a b ~(~a & ~b)
+  0 0      0
+  1 0      1
+  0 1      1
+  1 1      1
+
+*/
 
 
 /* 
@@ -191,17 +195,12 @@ int isTmax(int x) {
   return !(~(x + 1) ^ x) & !!(x + 1);
 }
 
-/**
- * isTmax思路：
- * 以4位举例，TMax为 0 1 1 1
- * 这个数加一为 1 0 0 0
- * 我们对 1 0 0 0 每一位均取反便可得到原数，因此只需要判断~(x + 1) == x是否成立即可
- * 由于不能用等号，因此用异或代替，即!(~(x + 1) ^ x)
- * 有一个例外情况是 -1，位表示为 1 1 1 1
- * 显然，-1也是满足上述条件的，因此需要将x + 1 = 0这种情况排除掉
- * 我们让所有x + 1 = 0的数变为0，让x + 1 != 0的数变为1，然后跟刚才的结果按位与即可
- * 
- */
+/*
+  suppose x is TMax, bits represent is [0111] (4 bits)
+  Notice that the bits represent of ~(x + 1) is equal to x
+  so we can judge the bits represent of x and ~(x + 1) whether is it equal
+  one exception is -1, its bits represent is [1111], so we should guarantee that x is not equal to -1 
+*/
 
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -244,13 +243,12 @@ int isAsciiDigit(int x) {
   return ahead & !(carry >> 4);
 }
 
-/**
- * 这里重点在于对后4位的判断
- * 后四位的范围要在0000到1001之间才符合题意
- * 注意到，1001加上0110就可以得到4位的最大值
- * 因此如果后四位大于1001，那么加上0110一定会造成进位，我们将进位位取出即可判断后四位是否在范围内
- * 
- */
+/*
+  the point is that the judgment of the last four bits
+  the last four bits legal range are 0000 to 1001
+  we add 0110 to it, the range transform into 0110 to 1111
+  next, if the process produces a carry, we can judge that the last four bits is illegal range 
+*/
 
 
 
@@ -279,7 +277,7 @@ int conditional(int x, int y, int z) {
  */
 int isLessOrEqual(int x, int y) {
   int isEqual = !(x ^ y);
-  int sub = y - x;
+  int sub = y + (~x + 1);
   int isBiggerZero = !(sub >> 31) & !!sub;
   return isEqual | isBiggerZero;
 }
@@ -311,6 +309,7 @@ int logicalNeg(int x) {
  *  Rating: 4
  */
 int howManyBits(int x) {
+  int bit16, bit8, bit4, bit2, bit1, bit;
   int sign = x >> 31;//positive will set to 0, and negative is 11...1
   /*
   If x <  0, its bit representation is 11...10...
@@ -321,7 +320,6 @@ int howManyBits(int x) {
   */
   x = x ^ sign;
   //The follow code attempt to find the fitst 1 on far left， this process is like Binary search
-  int bit16, bit8, bit4, bit2, bit1, bit;
   bit16 = !!(x >> 16) << 4;//at least 16 bits
   x >>= bit16;
   bit8 = !!(x >> 8) << 3;//at least 8 bits
@@ -369,10 +367,10 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  if((uf & 0x7fffffff) == 0) return 0;
+  int E, M;
   //go to get sign bits
   int sign = uf >> 31;
-  int E, M;
+  if((uf & 0x7fffffff) == 0) return 0;
   
   E = ((uf & 0x7f800000) >> 23) - 127, M = (uf & 0x007fffff) | 0x00800000;//get 1 + M (notes the position of 1)
 
@@ -401,8 +399,15 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
+  int exp = x + 127;
+  //the range of float num is from 2^-149 to 2^127
 
-  return 2;
-    
+  if(x < -149) return 0;
+  else if(x >= 128) return 0x7f800000;
 
+  //denormal num ranges from 2^-149 to 2^-126
+  if(-149 <= x && x <= -127) return 1 << (x + 149);
+  //E = e - Bias => e = E + Bias
+  //frac is [00...0], resulting in M = 1, that's what we want
+  return exp << 23;
 }
