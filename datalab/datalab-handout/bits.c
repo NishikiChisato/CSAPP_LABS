@@ -264,7 +264,6 @@ int isAsciiDigit(int x) {
 int conditional(int x, int y, int z) {
   int isZero = ~!x + 1;//x == 0 => [1...1], x == 1 => [0...0]
   return (~isZero & y) + (isZero & z);
-
 }
 
 

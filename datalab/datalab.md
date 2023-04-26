@@ -14,6 +14,11 @@
     - [addOddBits](#addoddbits)
     - [negate](#negate)
     - [isAsciiDigit](#isasciidigit)
+    - [conditional](#conditional)
+    - [isLessOrEqual](#islessorequal)
+    - [logicalNeg](#logicalneg)
+    - [howManyBits](#howmanybits)
+    - [floatScale2](#floatscale2)
 
 ## 准备
 
@@ -226,4 +231,164 @@ int negate(int x) {
 ### isAsciiDigit
 
 > 要求：如果 `x` 为字符 `0` 到 `9` （`ASCII` 为 `0x30` 到 `0x39` ）则返回 `1` ，否则为 `0`
+
+我们首先判断高四位，`x` 的高四位必须是 `0x30` ，我们将其**左移四位**得到的结果与 `0x03` 按位异或，看结果是否为 `0`，即：`!((x >> 4) ^ 0x03)`
+
+这里不能直接与 `0x30` 按位异或，因为满足条件的第四位并不全为 `0` ，因此需要将其左移四位之后再取异或
+
+随后我们取出 `x` 的第四位的值 `lower4bits` ，往后需要判断 `lower4bits` 处于范围 `0x0` 到 `0x9` 之间
+
+注意到 `0x9` 的二进制表述为 `1001` ，将其加上 `0110` 之后得到 `4` 为二进制的最大值 `1111` ，因此如果一个数的范围大于 `0x9` ，那么加上 `0110` 之后必然会导致**进位**，我们只需要检测是否产生进位即可（`lower4bits` 中第四位是否为 `1`）
+
+答案：
+
+```c
+int isAsciiDigit(int x) {
+  int ahead = !((x >> 4) ^ 0x03);
+  int lower4Bits = x & 0xF;
+  int carry = lower4Bits + 0x06;
+  return ahead & !(carry >> 4);
+}
+```
+
+### conditional
+
+> 要求：实现 `x ? y : z`
+
+如果 `x` 为 `0` ，则需要取 `z` ，反之为 `y`，因此我们考虑用**加法**的形式来实现
+
+具体地，我们构造下式：
+
+$$
+Expr\And y + \neg Expr\And z
+$$
+
+其中 $Expr$ 为与 $x$ 有关的表达式
+
+也就是我们需要当 `x` 为 `0` 时，$Expr$ 为 `[0000]`，当 `x` 为**非零**时，$Expr$ 为 `[1111]`
+
+需要注意的是，$Expr$ 为一个向量，**要么全零，要么全一**
+
+此时 $Expr$ 与 `x` 的关系为：`~!x + 1`
+
+答案：
+
+```c
+int conditional(int x, int y, int z) {
+  int isZero = ~!x + 1;//x == 0 => [1...1], x == 1 => [0...0]
+  return (~isZero & y) + (isZero & z);
+}
+```
+
+### isLessOrEqual
+
+> 要求：如果 `x <= y` 则返回 `1` ，否则返回 `0`
+
+分两种情况判断：`x < y` 与 `x = y`
+
+后者很容易，就是：`!(x ^ y)`
+
+对于前者的判断，我们转化为判断 `y - x` 是否大于 `0` ，**也就是最高位是否为 `0`**，设其结果为 `sub`
+
+这里我们需要判断 `sub` 是否产生溢出，具体地，如果 `x` 为 $TMin$ 此时 `-x` 为 $TMin$ ，只要 `y` 为负数就会发生溢出
+
+如果 `y` 为负数，此时最高位溢出为 `0` ，如果 `y` 为正数，此时最高位没有溢出，为 `1`
+
+因此如果 `sub` 的最高位为 `0` **且** `sub` 的结果不为零，说明发生了溢出
+
+最后取二者按位与即可
+
+答案：
+
+```c
+int isLessOrEqual(int x, int y) {
+  int isEqual = !(x ^ y);
+  int sub = y + (~x + 1);
+  int isBiggerZero = !(sub >> 31) & !!sub;
+  return isEqual | isBiggerZero;
+}
+```
+
+### logicalNeg
+
+> 要求：不能使用 `!` 来实现 `!`
+
+我们需要知道一个性质：`x | -x` 的值可以表示为：从右往左找到第一个 `1` ，然后左边的所有位均为 `1`
+
+举个例子，如果 `x` 为 `[0010]` 那么 `x | -x` 为 `[1110]`
+
+基于此，我们可以得到一个非常有用的性质，如果 `x` 为 `0` ，那么这样操作后的结果依然为 `0` ，如果 `x` 不为 `0`，那么结果必然不为 `0` 
+
+对于后一种情况，我们可以确定的是，**其最高位一定为 `1`**
+
+因此，我们将 `x | -x` 右移 `31` 位，**得到 `[111...111]` ，也就是 `-1`**，将其加 `1` 就是我们需要的结果
+
+答案：
+
+```c
+int logicalNeg(int x) {
+  return ((x | (~x + 1)) >> 31) + 1;
+}
+```
+
+### howManyBits
+
+> 要求：返回可以表示 `x` 的最小二进制数的个数
+
+如果 `x` 为负数，其表示为：`[1...110...]`，也就是我们需要找到**最左边第一个 `0`** 的位置，然后将结果加一（前面要补一）
+
+如果 `x` 为正数，其表示为：`[0...001...]`，因此我们需要找到**最左边第一个 `1`** 的位置，同时也需要将结果加上一（前面要补零）
+
+我们考虑将这两种情况统一一下：如果 `x` 为负数的话，我们只需要将其**按位异或**一个全一的数 `[1...1]`，便可以转换成正数的情况
+
+由于条件为 `x` 小于 `0` ，因此如果要得到 `[1...1]` ，我们将 `x` 右移 `31` 为即可得到
+
+而如果 `x` 大于等于 `0` ，此时得到的是 `[0...0]` ，按位异或 `x` 并不影响结果
+
+因此预处理部分为：
+
+```c
+int sign = x >> 31;
+x = x ^ sign;
+```
+
+往后的做法类似于二分查找，我们先检查 `x` 低 `16` 位是否存在 `1` ，**如果存在则表明 `x` 至少需要 `16` 位来表示**
+
+此后我们将 `x` 右移 `16` 位，检查低 `8` 位是否存在 `1` ，并重复这个过程
+
+我们将每次得到的结果记录下来，最后将所有结果的总和**加一**就是答案
+
+答案：
+
+```c
+int howManyBits(int x) {
+  int bit16, bit8, bit4, bit2, bit1, bit;
+  int sign = x >> 31;//positive will set to 0, and negative is 11...1
+  /*
+  If x <  0, its bit representation is 11...10...
+  If x >= 0, its bit representation is 00...01...
+  So, for negative num, we should find the first 0 on the far left and the res must plus 1
+  And for positive num, we shouble find the first 1 on the far left, and the res also plus 1
+  We consider turn negative num form into positive num form
+  */
+  x = x ^ sign;
+  //The follow code attempt to find the fitst 1 on far left， this process is like Binary search
+  bit16 = !!(x >> 16) << 4;//at least 16 bits
+  x >>= bit16;
+  bit8 = !!(x >> 8) << 3;//at least 8 bits
+  x >>= bit8;
+  bit4 = !!(x >> 4) << 2;//at least 4 bits
+  x >>= bit4;
+  bit2 = !!(x >> 2) << 1;//at least 2 bits
+  x >>= bit2;
+  bit1 = !!(x >> 1);//at least 1 bits
+  x >>= bit1;
+  bit = x;
+  return bit16 + bit8 + bit4 + bit2 + bit1 + bit + 1;
+}
+```
+
+### floatScale2
+
+> 要求：返回 `2 * x` 的浮点数位级表示，`x` 以无符号整数给出
 
