@@ -12,6 +12,8 @@
     - [tmin](#tmin)
     - [isTmax](#istmax)
     - [addOddBits](#addoddbits)
+    - [negate](#negate)
+    - [isAsciiDigit](#isasciidigit)
 
 ## 准备
 
@@ -23,6 +25,13 @@
 ### 要求
 
 本实验要求我们补充 `bits.c` 当中的函数，使得能够通过测试
+
+对于每个表达式，要求：
+
+1. 整数常量 `0` 到 `255` （`0xFF`），包括 `0` 到 `255`（不允许使用大常量），例如 `0xffffffff`
+2. 函数参数和局部变量（无全局变量）
+3. 一元整数运算`！~`
+4. 二进制整数运算 `& ^ |+ << >>`
 
 待补充函数分为两部分：整数函数和浮点数函数
 
@@ -184,4 +193,37 @@ int isTmax(int x) {
 ### addOddBits
 
 > 要求：如果 `x` 的位表示（从 `0` 开始）中奇数位全为 `1` ，则返回 `1` ，否则返回 `0`
+
+二进制中每个奇数位均为 `1` 的数为：`0xAAAAAAAA`，因此我们考虑用 `0xAA` 通过移位的形式得到
+
+将 `0xAAAAAAAA` 按位与 `x` 的结果与 `0xAAAAAAAA` 判断是否相等即可
+
+答案：
+
+```c
+int allOddBits(int x) {
+  int op = 0xAA;
+  op |= (op << 8);
+  op |= (op << 16);
+  return !((x & op) ^ op); 
+}
+```
+
+### negate
+
+> 要求：求出 `-x`
+
+按照补码非的定义，$-x=\sim x + 1$
+
+答案：
+
+```c
+int negate(int x) {
+  return ~x + 1;
+}
+```
+
+### isAsciiDigit
+
+> 要求：如果 `x` 为字符 `0` 到 `9` （`ASCII` 为 `0x30` 到 `0x39` ）则返回 `1` ，否则为 `0`
 
