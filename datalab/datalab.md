@@ -19,6 +19,8 @@
     - [logicalNeg](#logicalneg)
     - [howManyBits](#howmanybits)
     - [floatScale2](#floatscale2)
+    - [floatFloat2Int](#floatfloat2int)
+    - [floatPower2](#floatpower2)
 
 ## 准备
 
@@ -392,3 +394,100 @@ int howManyBits(int x) {
 
 > 要求：返回 `2 * x` 的浮点数位级表示，`x` 以无符号整数给出
 
+分规格数和非规格数进行讨论
+
+如果 `x` 为规格数，那么**将阶码部分加一**；如果 `x` 是非规格数，在**保证符号位不变的情况下将 `x` 左移一位**
+
+由于 `x` 是 `float` ，因此其 `23 ~ 30` 位用于表示阶码，因此如果要判断阶码是否全为 `0` 的话可以将 `x` 按位与 `0x7F800000`
+
+如果 `x` 按位与 `0x7F800000` 不为零，说明 `x` 为规格数，否则为非规格数
+
+对于规格数，我们将其加上 `0x00800000`；对于非规格数，我们只取其位数并左移一位，然后再按位或上 `x` 的符号
+
+答案：
+
+```c
+unsigned floatScale2(unsigned uf) {
+  unsigned ans = uf;
+  //normalizal
+  if((uf & 0x7f800000) != 0 && (uf & 0x7f800000) != 0x7f800000) ans += 0x00800000;
+  //denormalizal, move directly one bit to the left, notes the sign bits
+  //can not move directly to the left
+  else if((uf & 0x7f800000) == 0) ans = ((ans & 0x007fffff) << 1) | (ans & 0x80000000);
+  return ans;
+}
+```
+
+### floatFloat2Int
+
+> 要求：返回 `float` 转 `int` 得到的结果
+
+对于 `int` 而言，可表示（正数）范围为 $0\sim 2^{31}-1$
+
+我们首先得到 `x` 的阶码 `E` （**不是阶码的位表示 `exp`**）和 尾数 `M`，分类讨论：
+
+如果 `E < 0` 表明 `x` 是一个小数，那么无论 `x` 的正负，我们均是向零舍入，因此直接返回 `0`
+
+如果 `E >= 31` ，此时超出 `int` 可以表示的最大值，返回 `0x80000000`
+
+由于尾数的位数为 `23` （如果我们直接返回位数的话，相当于本身就乘了 $2^{23}$），因此如果 `E > 23` ，我们需要额外将其左移 `E - 23` 位，如果 `E <= 23` ，我们需要将其右移 `23 - E` 位
+
+到此为止，我们已经构造出 `M` ，我们还需要保证 `M` 的符号与 `x` 相一致
+
+如果二者相同则返回 `M` ，否则返回 `-M`
+
+答案：
+
+```c
+int floatFloat2Int(unsigned uf) {
+  int E, M;
+  //go to get sign bits
+  int sign = uf >> 31;
+  if((uf & 0x7fffffff) == 0) return 0;
+  
+  E = ((uf & 0x7f800000) >> 23) - 127, M = (uf & 0x007fffff) | 0x00800000;//get 1 + M (notes the position of 1)
+
+  if(E >= 31) return 0x80000000;
+  else if(E < 0) return 0;
+
+  //the number of the digit of the M is 23, so if E >= 32, M shoule muliple 2^(E - 23), M itself at least has 23 bits
+  if(E > 23) M <<= (E - 23);
+  else M >>= (23 - E);
+
+  //if the sign of uf is equal to the sign of M, return M, else return -M
+  if(sign ^ (M >> 31)) return ~M + 1;
+  else return M;
+}
+```
+
+### floatPower2
+
+> 要求：一单精度浮点数的形式返回 $2^x$ 的位表示
+
+对于单精度浮点数而言，可表示（正数）范围为 $2^{-23}\times 2^{-126} \sim (2-\epsilon)\times 2^{127}$
+
+因此如果 `x` 小于 `-149` ，则直接返回 `0`；相应地，如果 `x` 大于 `127` ，则返回 $INF$ `0x7F800000`
+
+如果 `x` 处于 `-149` 到 `-127` 之间（非规格数），由于非规格化没有前置的 $1$ ，因此我们直接将 $1$ 左移 `x + 149` 位即可
+
+如果 `x` 为规格化数，由于存在前置的 $1$ ，我们将尾数全部置零，然后凑出阶码 `exp` 即可
+
+具体地，`exp` 为 `x + 127` （得到 `exp` 的位表示）得到的结果向左移动 `23` 位
+
+答案：
+
+```c
+unsigned floatPower2(int x) {
+  int exp = x + 127;
+  //the range of float num is from 2^-149 to 2^127
+
+  if(x < -149) return 0;
+  else if(x >= 128) return 0x7f800000;
+
+  //denormal num ranges from 2^-149 to 2^-126
+  if(-149 <= x && x <= -127) return 1 << (x + 149);
+  //E = e - Bias => e = E + Bias
+  //frac is [00...0], resulting in M = 1, that's what we want
+  return exp << 23;
+}
+```

@@ -376,7 +376,7 @@ int floatFloat2Int(unsigned uf) {
   if(E >= 31) return 0x80000000;
   else if(E < 0) return 0;
 
-  //the number of the digit of the E is 23, so if E >= 32, M shoule muliple 2^(E - 23), M itself at least has 23 bits
+  //the number of the digit of the M is 23, so if E >= 32, M shoule muliple 2^(E - 23), M itself at least has 23 bits
   if(E > 23) M <<= (E - 23);
   else M >>= (23 - E);
 
