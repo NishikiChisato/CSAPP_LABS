@@ -61,7 +61,7 @@ objdump -d bomb > disassemble.asm
 
 汇编代码如下：
 
-```asm
+```c
 0000000000400ee0 <phase_1>:
   400ee0:	48 83 ec 08          	sub    $0x8,%rsp
   400ee4:	be 00 24 40 00       	mov    $0x402400,%esi
@@ -91,7 +91,7 @@ objdump -d bomb > disassemble.asm
 
 `phase_2` 代码：
 
-```asm
+```c
 0000000000400efc <phase_2>:
   400efc:	55                   	push   %rbp
   400efd:	53                   	push   %rbx
@@ -122,7 +122,7 @@ objdump -d bomb > disassemble.asm
 
 `read_six_numbers` 代码：
 
-```asm
+```c
 000000000040145c <read_six_numbers>:
   40145c:	48 83 ec 18          	sub    $0x18,%rsp
   401460:	48 89 f2             	mov    %rsi,%rdx
@@ -155,7 +155,7 @@ objdump -d bomb > disassemble.asm
 
 在 `phase_2` 中，`read_six_numbers` 要求第一个数必须是 `1`：
 
-```asm
+```c
   400f0a:	83 3c 24 01          	cmpl   $0x1,(%rsp)
   400f0e:	74 20                	je     400f30 <phase_2+0x34>
   400f10:	e8 25 05 00 00       	call   40143a <explode_bomb>
@@ -163,7 +163,7 @@ objdump -d bomb > disassemble.asm
 
 我们重点关注后面的代码：
 
-```asm
+```c
   400f15:	eb 19                	jmp    400f30 <phase_2+0x34>
   400f17:	8b 43 fc             	mov    -0x4(%rbx),%eax
   400f1a:	01 c0                	add    %eax,%eax
@@ -195,7 +195,7 @@ objdump -d bomb > disassemble.asm
 
 汇编代码如下：
 
-```asm
+```c
 0000000000400f43 <phase_3>:
   400f43:	48 83 ec 18          	sub    $0x18,%rsp
   400f47:	48 8d 4c 24 0c       	lea    0xc(%rsp),%rcx
@@ -283,7 +283,7 @@ objdump -d bomb > disassemble.asm
 
 `phase_4` 代码：
 
-```asm
+```c
 000000000040100c <phase_4>:
   40100c:	48 83 ec 18          	sub    $0x18,%rsp
   401010:	48 8d 4c 24 0c       	lea    0xc(%rsp),%rcx
@@ -313,7 +313,7 @@ objdump -d bomb > disassemble.asm
 
 我们看后面的代码：
 
-```asm
+```c
   40102e:	83 7c 24 08 0e       	cmpl   $0xe,0x8(%rsp)
   401033:	76 05                	jbe    40103a <phase_4+0x2e>
   401035:	e8 00 04 00 00       	call   40143a <explode_bomb>
@@ -336,7 +336,7 @@ objdump -d bomb > disassemble.asm
 
 要确定 `x` 的值，我们只能去分析 `func4` ，代码如下：
 
-```asm
+```c
 0000000000400fce <func4>:
   400fce:	48 83 ec 08          	sub    $0x8,%rsp
   400fd2:	89 d0                	mov    %edx,%eax
@@ -372,7 +372,7 @@ objdump -d bomb > disassemble.asm
 
 我们设 `%eax` 当中存储的变量为 `val`，那么：
 
-```asm
+```c
   400fce:	48 83 ec 08          	sub    $0x8,%rsp
   400fd2:	89 d0                	mov    %edx,%eax
   400fd4:	29 f0                	sub    %esi,%eax
@@ -431,7 +431,7 @@ int func4(int x, int y, iny z)
 
 汇编代码如下：
 
-```asm
+```c
 0000000000401062 <phase_5>:
   401062:	53                   	push   %rbx
   401063:	48 83 ec 20          	sub    $0x20,%rsp
@@ -477,7 +477,7 @@ int func4(int x, int y, iny z)
 
 事先说明一点，以下几行为金丝雀，直接忽略就行
 
-```asm
+```c
   40106a:	64 48 8b 04 25 28 00 	mov    %fs:0x28,%rax
   401071:	00 00 
   401073:	48 89 44 24 18       	mov    %rax,0x18(%rsp)
@@ -490,7 +490,7 @@ int func4(int x, int y, iny z)
 
 将寄存器 `%eax` 的值清零后跳到 `0x40108b`，代码如下：
 
-```asm
+```c
   40108b:	0f b6 0c 03          	movzbl (%rbx,%rax,1),%ecx
   40108f:	88 0c 24             	mov    %cl,(%rsp)
   401092:	48 8b 14 24          	mov    (%rsp),%rdx
@@ -508,7 +508,7 @@ int func4(int x, int y, iny z)
 
 重复六次后，执行以下代码：
 
-```asm
+```c
   4010ae:	c6 44 24 16 00       	movb   $0x0,0x16(%rsp)
   4010b3:	be 5e 24 40 00       	mov    $0x40245e,%esi
   4010b8:	48 8d 7c 24 10       	lea    0x10(%rsp),%rdi
@@ -521,7 +521,7 @@ int func4(int x, int y, iny z)
 
 我们打印出地址为 `0x4024b0` 和 `0x40245e` 的字符串，如下：
 
-```asm
+```c
 (gdb) x /s 0x4024b0
 0x4024b0 <array.3449>:  "maduiersnfotvbylSo you think you can stop the bomb with ctrl-c, do you?"
 (gdb) x /s 0x40245e
@@ -540,7 +540,7 @@ int func4(int x, int y, iny z)
 
 汇编代码如下：
 
-```asm
+```c
 00000000004010f4 <phase_6>:
   4010f4:	41 56                	push   %r14
   4010f6:	41 55                	push   %r13
@@ -631,5 +631,93 @@ int func4(int x, int y, iny z)
   401203:	c3                   	ret    
 ```
 
-前面我们知道，`read_six_number` 会读取六个数，分别存放到 `%rsp`、`%0x4(%rsp)`、`0x14(%rsp)`、`0x10(%rsp)`、`0xc(%rsp)`、`0x8(%rsp)`
+前面我们知道，`read_six_number` 会读取六个**无符号数**，分别存放到内存为 `(%rsp)`、`%0x4(%rsp)`、`0x14(%rsp)`、`0x10(%rsp)`、`0xc(%rsp)`、`0x8(%rsp)`。相关代码如下：
+
+```c
+  4010fc:	48 83 ec 50          	sub    $0x50,%rsp
+  401100:	49 89 e5             	mov    %rsp,%r13
+  401103:	48 89 e6             	mov    %rsp,%rsi
+  401106:	e8 51 03 00 00       	call   40145c <read_six_numbers>
+  40110b:	49 89 e6             	mov    %rsp,%r14
+  40110e:	41 bc 00 00 00 00    	mov    $0x0,%r12d
+  401114:	4c 89 ed             	mov    %r13,%rbp
+```
+这部分的代码在读取了六个数之后，还设置了几个寄存器的值：
+
+```c
+%r13 = %rsi = %r14 = %rbp = %rsp
+%r12 = 0
+```
+
+后面紧跟着的代码如下：
+
+```c
+  401117:	41 8b 45 00          	mov    0x0(%r13),%eax
+  40111b:	83 e8 01             	sub    $0x1,%eax
+  40111e:	83 f8 05             	cmp    $0x5,%eax
+  401121:	76 05                	jbe    401128 <phase_6+0x34>
+  401123:	e8 12 03 00 00       	call   40143a <explode_bomb>
+  401128:	41 83 c4 01          	add    $0x1,%r12d
+  40112c:	41 83 fc 06          	cmp    $0x6,%r12d
+  401130:	74 21                	je     401153 <phase_6+0x5f>
+  401132:	44 89 e3             	mov    %r12d,%ebx
+  401135:	48 63 c3             	movslq %ebx,%rax
+  401138:	8b 04 84             	mov    (%rsp,%rax,4),%eax
+  40113b:	39 45 00             	cmp    %eax,0x0(%rbp)
+  40113e:	75 05                	jne    401145 <phase_6+0x51>
+  401140:	e8 f5 02 00 00       	call   40143a <explode_bomb>
+  401145:	83 c3 01             	add    $0x1,%ebx
+  401148:	83 fb 05             	cmp    $0x5,%ebx
+  40114b:	7e e8                	jle    401135 <phase_6+0x41>
+  40114d:	49 83 c5 04          	add    $0x4,%r13
+  401151:	eb c1                	jmp    401114 <phase_6+0x20>
+```
+
+这一段实质上是二重循环，我们设之前 `6` 个数分别存储在数组 `a[0~5]` 中，那么有：
+
+```c
+for(int i = 0; i <= 5; i ++)
+{
+    //这里的a[i]-1是一个无符号数
+    if((a[i] - 1) > 5) explode_bomb();
+    for(int j = i + 1; j <= 5; j ++)
+    {
+        if(a[i] == a[j]) explode_bomb();
+    }
+}
+```
+
+接着跳到 `0x401153`，后续代码如下：
+
+```c
+  401153:	48 8d 74 24 18       	lea    0x18(%rsp),%rsi
+  401158:	4c 89 f0             	mov    %r14,%rax
+  40115b:	b9 07 00 00 00       	mov    $0x7,%ecx
+  401160:	89 ca                	mov    %ecx,%edx
+  401162:	2b 10                	sub    (%rax),%edx
+  401164:	89 10                	mov    %edx,(%rax)
+  401166:	48 83 c0 04          	add    $0x4,%rax
+  40116a:	48 39 f0             	cmp    %rsi,%rax
+  40116d:	75 f1                	jne    401160 <phase_6+0x6c>
+  40116f:	be 00 00 00 00       	mov    $0x0,%esi
+  401174:	eb 21                	jmp    401197 <phase_6+0xa3>
+```
+
+核心在于：
+
+```c
+  401162:	2b 10                	sub    (%rax),%edx
+  401164:	89 10                	mov    %edx,(%rax)
+```
+
+首先将每个数的**地址**加载到 `%rax` 中，然后将每个数自身减七，得到的结果在放回原数，翻译后的代码为：
+
+```c
+for(int i = 0; i < 6; i ++)
+{
+    a[i] = 7 - a[i];
+}
+```
+
+循环结束后将 `%esi` 设为 `0` ，之后跳转到 `0x401197`
 
