@@ -12,6 +12,7 @@
     - [phase\_4](#phase_4)
     - [phase\_5](#phase_5)
     - [phase\_6](#phase_6)
+    - [secret\_phase](#secret_phase)
 
 
 ## 准备
@@ -719,5 +720,517 @@ for(int i = 0; i < 6; i ++)
 }
 ```
 
-循环结束后将 `%esi` 设为 `0` ，之后跳转到 `0x401197`
+循环结束后将 `%esi` 设为 `0` ，之后跳转到 `0x401197`，后续代码如下：
 
+```c
+  40116f:	be 00 00 00 00       	mov    $0x0,%esi
+  401174:	eb 21                	jmp    401197 <phase_6+0xa3>
+  401176:	48 8b 52 08          	mov    0x8(%rdx),%rdx
+  40117a:	83 c0 01             	add    $0x1,%eax
+  40117d:	39 c8                	cmp    %ecx,%eax
+  40117f:	75 f5                	jne    401176 <phase_6+0x82>
+  401181:	eb 05                	jmp    401188 <phase_6+0x94>
+  401183:	ba d0 32 60 00       	mov    $0x6032d0,%edx
+  401188:	48 89 54 74 20       	mov    %rdx,0x20(%rsp,%rsi,2)
+  40118d:	48 83 c6 04          	add    $0x4,%rsi
+  401191:	48 83 fe 18          	cmp    $0x18,%rsi
+  401195:	74 14                	je     4011ab <phase_6+0xb7>
+  401197:	8b 0c 34             	mov    (%rsp,%rsi,1),%ecx
+  40119a:	83 f9 01             	cmp    $0x1,%ecx
+  40119d:	7e e4                	jle    401183 <phase_6+0x8f>
+  40119f:	b8 01 00 00 00       	mov    $0x1,%eax
+  4011a4:	ba d0 32 60 00       	mov    $0x6032d0,%edx
+  4011a9:	eb cb                	jmp    401176 <phase_6+0x82>
+```
+
+看到代码中有 `0x6032d0` ，我们查看该地址处的内容：
+
+```c
+(gdb) x 0x6032d0
+0x6032d0 <node1>:       0x0000014c
+```
+
+该首地址对应的对象被命名为 `node1` ，我们尝试从改地址处连续打印 `30` 个内存单元，每个单元 `4` 字节：
+
+```c
+(gdb) x /30xw  0x6032d0
+0x6032d0 <node1>:       0x0000014c      0x00000001      0x006032e0      0x00000000
+0x6032e0 <node2>:       0x000000a8      0x00000002      0x006032f0      0x00000000
+0x6032f0 <node3>:       0x0000039c      0x00000003      0x00603300      0x00000000
+0x603300 <node4>:       0x000002b3      0x00000004      0x00603310      0x00000000
+0x603310 <node5>:       0x000001dd      0x00000005      0x00603320      0x00000000
+0x603320 <node6>:       0x000001bb      0x00000006      0x00000000      0x00000000
+0x603330:       0x00000000      0x00000000      0x00000000      0x00000000
+0x603340 <host_table>:  0x00402629      0x00000000
+```
+
+对于每一个 `node` 而言，有用的数据只有前三个，
+
+每个 `node` 的第二个数据很明显表示编号，而第三个数据刚好是下一个 `node` 的首地址，因此这是一个链表
+
+我们尝试给出链表中节点的信息：
+
+```c
+struct node
+{
+    int val;
+    int idx;//序号
+    node* next;//下一个节点
+}
+```
+
+按顺序翻译代码如下：
+
+```c
+int i = 0;//i in %rsi
+while(i != 6)
+{
+    //a 等于 %rsp
+  	int v = *(a + i);   //mov (%rsp,%rsi,1),%ecx, v in %ecx
+    node* ptr;          //ptr in %edx
+    if(v <= 1)
+    {
+        ptr = 0x6032d0; //ptr in %edx
+    }
+    else
+    {
+        int j = 1;      //j in %eax
+        ptr = 0x6032d0; //ptr in %edx
+        do
+        {
+            ptr = ptr + 0x8;    //ptr = ptr->next, mov 0x8(%rdx),%rdx
+            j++;
+        }while(j != v);
+    }
+    a[2 * i + 8] = ptr;         //mov %rdx, 0x20(%rsp,%rsi,2)    
+  	i ++;                       //add $0x4,%rsi
+}
+```
+
+观察代码，我们可以得到以下结论：
+
+* 从地址 `%rsp + 0x20` 处开始存储链表节点，存储方式类似于栈
+* 由于链表只有 `6` 个节点，且**节点内容固定**，因此输入的 `6` 个数只能为 `1 ~ 6`
+* 对于每个数 `a[i]` ，找到与其对应的链表节点编号，然后**将该链表节点插入到栈顶**
+
+也就是将六个节点按输入数字的顺序进行排序
+
+注意：此时仅仅是将值存储在对应地址处，每个节点的 `next` 指针并没有赋值
+
+代码结束后跳到地址 `0x4011ab`，后续代码如下：
+
+```c
+  4011ab:	48 8b 5c 24 20       	mov    0x20(%rsp),%rbx
+  4011b0:	48 8d 44 24 28       	lea    0x28(%rsp),%rax
+  4011b5:	48 8d 74 24 50       	lea    0x50(%rsp),%rsi
+  4011ba:	48 89 d9             	mov    %rbx,%rcx
+  4011bd:	48 8b 10             	mov    (%rax),%rdx
+  4011c0:	48 89 51 08          	mov    %rdx,0x8(%rcx)
+  4011c4:	48 83 c0 08          	add    $0x8,%rax
+  4011c8:	48 39 f0             	cmp    %rsi,%rax
+  4011cb:	74 05                	je     4011d2 <phase_6+0xde>
+  4011cd:	48 89 d1             	mov    %rdx,%rcx
+  4011d0:	eb eb                	jmp    4011bd <phase_6+0xc9>
+  4011d2:	48 c7 42 08 00 00 00 	movq   $0x0,0x8(%rdx)
+  4011d9:	00
+```
+
+这里的时序如下：
+
+* 将第一个节点的地址赋给 `%rbx`，第一个节点的 `next` 指针赋值给 `%rax`，设定边界 `%rsi`
+* `%rcx` 存储第一个节点的地址，`%rdx` 存储第二个节点的地址
+* 将第二个节点的地址赋值给第一个节点的 `next` 指针
+* 第一个节点的指针后移，判断是否到达边界
+
+然后循环五次，最终会将最后一个节点的 `next` 指针置空，翻译成 `C` 代码如下：
+
+```c
+node* p[6];
+for(int i = 0; i < 5; i ++)
+{
+    p[i]->next = p[i + 1]->next;
+}
+p[5]->next = NULL;
+```
+
+相当于是**将六个节点的 `next` 指针相互串起来**，后续代码跳到 `0x4011da`，相关代码如下：
+
+```c
+  4011da:	bd 05 00 00 00       	mov    $0x5,%ebp
+  4011df:	48 8b 43 08          	mov    0x8(%rbx),%rax
+  4011e3:	8b 00                	mov    (%rax),%eax
+  4011e5:	39 03                	cmp    %eax,(%rbx)
+  4011e7:	7d 05                	jge    4011ee <phase_6+0xfa>
+  4011e9:	e8 4c 02 00 00       	call   40143a <explode_bomb>
+  4011ee:	48 8b 5b 08          	mov    0x8(%rbx),%rbx
+  4011f2:	83 ed 01             	sub    $0x1,%ebp
+  4011f5:	75 e8                	jne    4011df <phase_6+0xeb>
+```
+
+这里需要注意的是，**`%rbp` 始终保存着第一个链表节点的地址**。这里的时序如下：
+
+* 先将第二个节点的地址赋给 `%rax`
+* 将第二个节点的 `val` 赋值给 `eax`
+* 比较第二个节点的 `val` 与第一个节点的 `val` ，**前者必须大于等于后者**，也就是按**降序排序**
+
+对应 `C` 语言代码如下：
+
+```c
+node* p[6];
+for(int i = 0; i < 5; i ++)
+{
+    if(p[i + 1]->val < p[i]->val) explode_bomb();
+}
+```
+
+我们考虑六个节点中 `val` 部分的值：
+
+|`idx`|`val`|
+|:-:|:-:|
+|`0x14c = 332`|`1`|
+|`0x0a8 = 168`|`2`|
+|`0x39c = 924`|`3`|
+|`0x2b3 = 691`|`4`|
+|`0x1dd = 477`|`5`|
+|`0x1bb = 443`|`6`|
+
+将 `val` 按降序排序后的编号为：`3 4 5 6 1 2`，由于之前将每个输入值 `a[i]` 都变为 `7 - a[i]`，因此最终结果为：`4 3 2 1 6 5`
+
+此时将以下内容写入文件 `ans` 中便可通关（结尾需要有空行）
+
+```c
+Border relations with Canada have never been better.
+1 2 4 8 16 32
+0 207
+7 0
+yonuvw
+4 3 2 1 6 5
+
+```
+
+运行结果：
+
+```c
+$ ./bomb ans
+Welcome to my fiendish little bomb. You have 6 phases with
+which to blow yourself up. Have a nice day!
+Phase 1 defused. How about the next one?
+That's number 2.  Keep going!
+Halfway there!
+So you got that one.  Try this one.
+Good work!  On to the next...
+Congratulations! You've defused the bomb!
+```
+
+---
+
+### secret_phase
+
+汇编代码如下：
+
+```c
+0000000000401242 <secret_phase>:
+  401242:	53                   	push   %rbx
+  401243:	e8 56 02 00 00       	call   40149e <read_line>
+  401248:	ba 0a 00 00 00       	mov    $0xa,%edx
+  40124d:	be 00 00 00 00       	mov    $0x0,%esi
+  401252:	48 89 c7             	mov    %rax,%rdi
+  401255:	e8 76 f9 ff ff       	call   400bd0 <strtol@plt>
+  40125a:	48 89 c3             	mov    %rax,%rbx
+  40125d:	8d 40 ff             	lea    -0x1(%rax),%eax
+  401260:	3d e8 03 00 00       	cmp    $0x3e8,%eax
+  401265:	76 05                	jbe    40126c <secret_phase+0x2a>
+  401267:	e8 ce 01 00 00       	call   40143a <explode_bomb>
+  40126c:	89 de                	mov    %ebx,%esi
+  40126e:	bf f0 30 60 00       	mov    $0x6030f0,%edi
+  401273:	e8 8c ff ff ff       	call   401204 <fun7>
+  401278:	83 f8 02             	cmp    $0x2,%eax
+  40127b:	74 05                	je     401282 <secret_phase+0x40>
+  40127d:	e8 b8 01 00 00       	call   40143a <explode_bomb>
+  401282:	bf 38 24 40 00       	mov    $0x402438,%edi
+  401287:	e8 84 f8 ff ff       	call   400b10 <puts@plt>
+  40128c:	e8 33 03 00 00       	call   4015c4 <phase_defused>
+  401291:	5b                   	pop    %rbx
+  401292:	c3                   	ret    
+  401293:	90                   	nop
+  401294:	90                   	nop
+  401295:	90                   	nop
+  401296:	90                   	nop
+  401297:	90                   	nop
+  401298:	90                   	nop
+  401299:	90                   	nop
+  40129a:	90                   	nop
+  40129b:	90                   	nop
+  40129c:	90                   	nop
+  40129d:	90                   	nop
+  40129e:	90                   	nop
+  40129f:	90                   	nop
+```
+
+这里面会使用到 `fun7` ，我们先去将 `fun7` 的表达式写出来，对应汇编如下：
+
+```c
+0000000000401204 <fun7>:
+  401204:	48 83 ec 08          	sub    $0x8,%rsp
+  401208:	48 85 ff             	test   %rdi,%rdi
+  40120b:	74 2b                	je     401238 <fun7+0x34>
+  40120d:	8b 17                	mov    (%rdi),%edx
+  40120f:	39 f2                	cmp    %esi,%edx
+  401211:	7e 0d                	jle    401220 <fun7+0x1c>
+  401213:	48 8b 7f 08          	mov    0x8(%rdi),%rdi
+  401217:	e8 e8 ff ff ff       	call   401204 <fun7>
+  40121c:	01 c0                	add    %eax,%eax
+  40121e:	eb 1d                	jmp    40123d <fun7+0x39>
+  401220:	b8 00 00 00 00       	mov    $0x0,%eax
+  401225:	39 f2                	cmp    %esi,%edx
+  401227:	74 14                	je     40123d <fun7+0x39>
+  401229:	48 8b 7f 10          	mov    0x10(%rdi),%rdi
+  40122d:	e8 d2 ff ff ff       	call   401204 <fun7>
+  401232:	8d 44 00 01          	lea    0x1(%rax,%rax,1),%eax
+  401236:	eb 05                	jmp    40123d <fun7+0x39>
+  401238:	b8 ff ff ff ff       	mov    $0xffffffff,%eax
+  40123d:	48 83 c4 08          	add    $0x8,%rsp
+  401241:	c3                   	ret
+```
+
+这个函数不难，需要注意的是： **`fun7` 的第一个参数为指针，第二个参数为整数**。翻译为 `C` 代码如下：
+
+```c
+//x in %rdi, y in %rsi
+int func7(int& x, int y)
+{
+    if(x == NULL) return 0xffffffff;
+    if(*x <= y) 
+    {
+        if(*x == y) return 0;
+        else 
+        {
+            int res = fun7(x + 16, y);
+            return 2 * res + 1;
+        }
+    }
+    else
+    {
+        int res =  fun7(x + 8, y);
+        return 2 * res;
+    }
+}
+```
+
+回到 `secret_phase` 中，先看前面的部分：
+
+```c
+  401243:	e8 56 02 00 00       	call   40149e <read_line>
+  401248:	ba 0a 00 00 00       	mov    $0xa,%edx
+  40124d:	be 00 00 00 00       	mov    $0x0,%esi
+  401252:	48 89 c7             	mov    %rax,%rdi
+  401255:	e8 76 f9 ff ff       	call   400bd0 <strtol@plt>
+  40125a:	48 89 c3             	mov    %rax,%rbx
+```
+
+首先将 `%edx` 与 `%esi` 的值分别设为 `0xa` 和 `0x0` ，然后将 `read_line` 的返回值赋值给 `%rdi`
+
+将 `strtol` 的返回值赋给 `%rbx`
+
+>`strtol` 是一个库函数，其定义为：`long int strtol(const char *str, char **endptr, int base)`
+>
+> 可以将 `str` 给定的字符串按照所给定的 `base` 转换成一个 `long int`
+>
+> * `str` 要转换为长整数的字符串
+> * `endptr` 表示第一个非法字符的地址
+> * `base` 表示基数，数值在 `2` 到 `36` 之间或者 `0`
+> * 函数执行成功则返回对应数，失败则返回 `0`
+>
+> `base` 用于指定合法字符的范围以及权值，比如：
+> 
+> * 当 `base` 为 `2` 时，只有字符 `0 ~ 1` 是合法的，此时每个位的权重为 `2` 的幂次
+> * 当 `base` 为 `8` 时，只有字符 `0 ~ 7` 是合法的，此时每个位的权重为 `8` 的幂次
+> * 当 `base` 为 `36` 时，只有字符 `0 ~ 9, a ~ z` 是合法的，此时每个位的权重为 `36` 的幂次
+
+因此，`read_line` 得到的字符串作为 `strtol` 的第一个参数，一个初始为空的指针作为第二个参数，数字 `10` 作为第三个参数，而从 `read_line` 中读到的整数则放到 `strtol` 的返回值当中（也就是 `%rax` 和 `%rbx`）
+
+> 判断：舍去得到结果的最低位字节（`lea -0x1(%rax),%eax`，最低位字节是因为采用小端存储），将其放在 `%eax` 中，此时要求 `%eax` 必须大于等于 `1000`
+
+往后将地址 `0x6030f0` 作为 `fun7` 的第一参数，将 `strtol` 得到的长整数作为第二参数，**要求 `fun7` 的返回值为 `2`**
+
+我们打印地址为 `0x6030f0` 处的内容：
+
+```c
+(gdb) x /100xw 0x6030f0
+0x6030f0 <n1>:  0x00000024      0x00000000      0x00603110      0x00000000
+0x603100 <n1+16>:       0x00603130      0x00000000      0x00000000      0x00000000
+0x603110 <n21>: 0x00000008      0x00000000      0x00603190      0x00000000
+0x603120 <n21+16>:      0x00603150      0x00000000      0x00000000      0x00000000
+0x603130 <n22>: 0x00000032      0x00000000      0x00603170      0x00000000
+0x603140 <n22+16>:      0x006031b0      0x00000000      0x00000000      0x00000000
+0x603150 <n32>: 0x00000016      0x00000000      0x00603270      0x00000000
+0x603160 <n32+16>:      0x00603230      0x00000000      0x00000000      0x00000000
+0x603170 <n33>: 0x0000002d      0x00000000      0x006031d0      0x00000000
+0x603180 <n33+16>:      0x00603290      0x00000000      0x00000000      0x00000000
+0x603190 <n31>: 0x00000006      0x00000000      0x006031f0      0x00000000
+0x6031a0 <n31+16>:      0x00603250      0x00000000      0x00000000      0x00000000
+0x6031b0 <n34>: 0x0000006b      0x00000000      0x00603210      0x00000000
+0x6031c0 <n34+16>:      0x006032b0      0x00000000      0x00000000      0x00000000
+0x6031d0 <n45>: 0x00000028      0x00000000      0x00000000      0x00000000
+0x6031e0 <n45+16>:      0x00000000      0x00000000      0x00000000      0x00000000
+0x6031f0 <n41>: 0x00000001      0x00000000      0x00000000      0x00000000
+0x603200 <n41+16>:      0x00000000      0x00000000      0x00000000      0x00000000
+0x603210 <n47>: 0x00000063      0x00000000      0x00000000      0x00000000
+0x603220 <n47+16>:      0x00000000      0x00000000      0x00000000      0x00000000
+0x603230 <n44>: 0x00000023      0x00000000      0x00000000      0x00000000
+0x603240 <n44+16>:      0x00000000      0x00000000      0x00000000      0x00000000
+0x603250 <n42>: 0x00000007      0x00000000      0x00000000      0x00000000
+0x603260 <n42+16>:      0x00000000      0x00000000      0x00000000      0x00000000
+0x603270 <n43>: 0x00000014      0x00000000      0x00000000      0x00000000
+```
+
+这个结构是一棵**二叉树**，其节点声明如下：
+
+```c
+struct node
+{
+    int val;
+    node* left;
+    node* right;
+}
+```
+
+因此对于节点 `n` 而言，`n + 8` 为左儿子，`n + 16` 为右儿子，最后一个字节留空
+
+这里的二叉树最好在本子上画出来，也就只有 `4` 层，方便理解
+
+这本质上其实是一棵二叉搜索树，大概为：
+
+```
+                     36
+            8                 30
+       16       22         45   107
+     1   7   20    35   45 
+```
+
+由于最终的返回值必须为 `2` ，因此第一次必须走左子树（返回值直接乘二的那条），第二次可以必须走右子树（返回值乘二再加一的那条），第三次可走可不走，走的话必须走左子树
+
+因此结果为 `20` 或 `22`，往后函数结束
+
+但有一个问题是，该如何进入 `secret_phase` 呢？
+
+在 `secret_phase` 中最后会调用 `phase_defused`，我们去看看这里的代码：
+
+```c
+00000000004015c4 <phase_defused>:
+  4015c4:	48 83 ec 78          	sub    $0x78,%rsp
+  4015c8:	64 48 8b 04 25 28 00 	mov    %fs:0x28,%rax
+  4015cf:	00 00 
+  4015d1:	48 89 44 24 68       	mov    %rax,0x68(%rsp)
+  4015d6:	31 c0                	xor    %eax,%eax
+  4015d8:	83 3d 81 21 20 00 06 	cmpl   $0x6,0x202181(%rip)        # 603760 <num_input_strings>
+  4015df:	75 5e                	jne    40163f <phase_defused+0x7b>
+  4015e1:	4c 8d 44 24 10       	lea    0x10(%rsp),%r8
+  4015e6:	48 8d 4c 24 0c       	lea    0xc(%rsp),%rcx
+  4015eb:	48 8d 54 24 08       	lea    0x8(%rsp),%rdx
+  4015f0:	be 19 26 40 00       	mov    $0x402619,%esi
+  4015f5:	bf 70 38 60 00       	mov    $0x603870,%edi
+  4015fa:	e8 f1 f5 ff ff       	call   400bf0 <__isoc99_sscanf@plt>
+  4015ff:	83 f8 03             	cmp    $0x3,%eax
+  401602:	75 31                	jne    401635 <phase_defused+0x71>
+  401604:	be 22 26 40 00       	mov    $0x402622,%esi
+  401609:	48 8d 7c 24 10       	lea    0x10(%rsp),%rdi
+  40160e:	e8 25 fd ff ff       	call   401338 <strings_not_equal>
+  401613:	85 c0                	test   %eax,%eax
+  401615:	75 1e                	jne    401635 <phase_defused+0x71>
+  401617:	bf f8 24 40 00       	mov    $0x4024f8,%edi
+  40161c:	e8 ef f4 ff ff       	call   400b10 <puts@plt>
+  401621:	bf 20 25 40 00       	mov    $0x402520,%edi
+  401626:	e8 e5 f4 ff ff       	call   400b10 <puts@plt>
+  40162b:	b8 00 00 00 00       	mov    $0x0,%eax
+  401630:	e8 0d fc ff ff       	call   401242 <secret_phase>
+  401635:	bf 58 25 40 00       	mov    $0x402558,%edi
+  40163a:	e8 d1 f4 ff ff       	call   400b10 <puts@plt>
+  40163f:	48 8b 44 24 68       	mov    0x68(%rsp),%rax
+  401644:	64 48 33 04 25 28 00 	xor    %fs:0x28,%rax
+  40164b:	00 00 
+  40164d:	74 05                	je     401654 <phase_defused+0x90>
+  40164f:	e8 dc f4 ff ff       	call   400b30 <__stack_chk_fail@plt>
+  401654:	48 83 c4 78          	add    $0x78,%rsp
+  401658:	c3                   	ret    
+  401659:	90                   	nop
+  40165a:	90                   	nop
+  40165b:	90                   	nop
+  40165c:	90                   	nop
+  40165d:	90                   	nop
+  40165e:	90                   	nop
+  40165f:	90                   	nop
+```
+
+此函数会先将 `num_input_strings` 与 `6` 进行比较，不等则直接返回。我们猜测 `num_input_strings` 表示输入字符串的大小
+
+此后我们打印地址 `0x402619` 和 `0x603870` 的字符串，有：
+
+```c
+(gdb) x /s 0x402619
+0x402619:       "%d %d %s"
+(gdb) x /s 0x603870
+0x603870 <input_strings+240>:   ""
+```
+
+我们发现此时的字符串为空，我们在每个 `phase` 函数前面打断点，看在哪个位置输出地址 `0x602870` 有值：
+
+```c
+Breakpoint 4, 0x000000000040100c in phase_4 ()
+(gdb) x /s 0x603870
+0x603870 <input_strings+240>:   "7 0"
+```
+
+也就是说，**当运行到 `phase_4` 时此字符串有值**
+
+之后调用 `sscanf`，从输入字符串中读取数据。如果最终读取的数据个数不为 `3` 则直接结束函数（也就是说此时输入的数为 `2`）
+
+这三个输入分别对应地址为：`0x8(%rsp)`、`0xc(%rsp)`、`0x10(%rsp)`（最后一个为字符串）
+
+之后会比较输入字符串与地址 `0x402622` 处的字符串是否相同，我们打印此处的字符串：
+
+```c
+(gdb) x /s 0x402622
+0x402622:       "DrEvil"
+```
+
+如果相同，后面会输出两个提示信息：
+
+```c
+(gdb) x /s 0x4024f8
+0x4024f8:       "Curses, you've found the secret phase!"
+(gdb) x /s 0x402520
+0x402520:       "But finding it and solving it are quite different..."
+```
+
+综上，我们需要在 `phase_4` 输入的后面加上 `DrEvil` 便可以进入 `secret_phase`
+
+总的答案为（保存在 `ans` 文件中）：
+
+```c
+Border relations with Canada have never been better.
+1 2 4 8 16 32
+0 207
+7 0 DrEvil
+yonuvw
+4 3 2 1 6 5
+20
+
+```
+
+运行结果：
+
+```c
+$ ./bomb ans 
+Welcome to my fiendish little bomb. You have 6 phases with
+which to blow yourself up. Have a nice day!
+Phase 1 defused. How about the next one?
+That's number 2.  Keep going!
+Halfway there!
+So you got that one.  Try this one.
+Good work!  On to the next...
+Curses, you've found the secret phase!
+But finding it and solving it are quite different...
+Wow! You've defused the secret stage!
+Congratulations! You've defused the bomb!
+```
