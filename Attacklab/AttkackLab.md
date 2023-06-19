@@ -5,6 +5,8 @@
     - [文件下载](#文件下载)
     - [目的](#目的)
     - [文件组成](#文件组成)
+  - [攻击](#攻击)
+    - [pahse\_1](#pahse_1)
 
 
 ## 准备
@@ -21,3 +23,15 @@
 
 ### 文件组成
 
+
+
+---
+
+## 攻击
+
+### pahse_1
+
+```bash
+chisato@chisato:~/CSAPPLABS/attacklab/target1$ ./hex2raw < ./answer/phase_1/input > ans
+chisato@chisato:~/CSAPPLABS/attacklab/target1$ ./ctarget -qi ans
+```
