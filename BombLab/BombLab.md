@@ -23,7 +23,7 @@
 
 ### 文件处理
 
-将文件解包后会得到三个文件：`README`、`bomb`、`bomb.c`，我们首先利用 `bojdump` 生成 `bomb` 的汇编文件，并将其保存在 `disassemble.asm` 当中
+将文件解包后会得到三个文件：`README`、`bomb`、`bomb.c`，我们首先利用 `objdump` 生成 `bomb` 的汇编文件，并将其保存在 `disassemble.asm` 当中
 
 ```bash
 objdump -d bomb > disassemble.asm
