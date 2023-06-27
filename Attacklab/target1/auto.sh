@@ -3,3 +3,4 @@
 ./ctarget -qi ./answer/phase_2/output
 ./ctarget -qi ./answer/phase_3/output
 ./rtarget -qi ./answer/phase_4/output
+./rtarget -qi ./answer/phase_5/output
