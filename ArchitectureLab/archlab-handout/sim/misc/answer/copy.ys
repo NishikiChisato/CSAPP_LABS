@@ -1,0 +1,48 @@
+# author: NishikiChisato
+
+# Execution begins at address 0
+    .pos 0
+    irmovq  stack, %rsp
+    call    main
+    halt
+
+.align 8
+# Source block
+src:
+    .quad 0x00a
+    .quad 0x0b0
+    .quad 0xc00
+# Destination block
+dest:
+    .quad 0x111
+    .quad 0x222
+    .quad 0x333
+
+main:
+    irmovq  src, %rdi
+    irmovq  dest, %rsi
+    irmovq  $0x3, %rdx
+    call    copy_block
+    ret
+
+copy_block:
+    irmovq  $8, %rbx
+    irmovq  $1, %r8
+    xorq    %rax, %rax
+    andq    %rdx, %rdx
+    je      test
+loop:
+    mrmovq  (%rdi), %rcx
+    rmmovq  %rcx, (%rsi)
+    addq    %rbx, %rsi
+    addq    %rbx, %rdi
+    xorq    %rcx, %rax
+    subq    %r8, %rdx
+test:
+    andq    %rdx, %rdx
+    jne     loop
+    ret
+
+# stack
+    .pos    0x200
+stack:
