@@ -1008,3 +1008,146 @@ Average CPE     8.45
 Score   40.9/60.0
 ```
 
+```assembly
+# Loop header
+    xorq 	%rax,%rax
+	iaddq 	$-8, %rdx
+	jl 		Root		# len < 8
+	
+Loop1:
+
+	mrmovq 	(%rdi), %r8
+	mrmovq 	8(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, (%rsi)
+	rmmovq 	%r9, 8(%rsi)
+	jle 	Loop2
+	iaddq 	$1, %rax
+Loop2:
+	andq 	%r9, %r9
+	jle 	Loop3
+	iaddq 	$1, %rax
+Loop3:
+	mrmovq 	16(%rdi), %r8
+	mrmovq 	24(%rdi), %r9	
+	andq 	%r8, %r8
+	rmmovq 	%r8, 16(%rsi)
+	rmmovq 	%r9, 24(%rsi)	
+	jle 	Loop4
+	iaddq 	$1, %rax
+Loop4:
+	andq 	%r9, %r9
+	jle 	Loop5
+	iaddq 	$1, %rax
+Loop5:
+	mrmovq 	32(%rdi), %r8
+	mrmovq 	40(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 32(%rsi)
+	rmmovq 	%r9, 40(%rsi)	
+	jle 	Loop6
+	iaddq 	$1, %rax
+Loop6:
+	andq 	%r9, %r9
+	jle 	Loop7
+	iaddq 	$1, %rax
+Loop7:
+	mrmovq 	48(%rdi), %r8
+	mrmovq 	56(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 48(%rsi)
+	rmmovq 	%r9, 56(%rsi)	
+	jle 	Loop8
+	iaddq 	$1, %rax
+Loop8:
+	andq 	%r9, %r9
+	jle 	Update
+	iaddq 	$1, %rax
+
+Update:
+	iaddq 	$64, %rdi
+	iaddq 	$64, %rsi
+
+Test1:
+	iaddq 	$-8, %rdx	# len - 8
+	jge		Loop1		
+
+
+# len in [0, 1, ..., 7]
+Root:
+	iaddq	$4, %rdx
+	jl		Left		# len < 4
+	jg 		Right		# len > 4	
+	je 		R4			# len = 4
+
+# len in [0, 1, 2, 3]
+Left:
+	iaddq 	$1, %rdx
+	je		R3			# len = 3
+	iaddq	$1, %rdx	
+	je		R2			# len = 2
+	iaddq	$1, %rdx
+	je 		R1			# len = 1
+	iaddq	$1, %rdx
+	je		Done
+
+
+# len in [5, 6, 7]
+Right:
+	iaddq 	$-1, %rdx
+	je		R5			# len = 5
+	iaddq	$-1, %rdx
+	je		R6			# len = 6
+	iaddq	$-1, %rdx
+	je 		R7			# len = 7
+
+R7:
+	mrmovq	48(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 48(%rsi)
+	jle		R6
+	iaddq 	$1, %rax
+R6:
+	mrmovq	40(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 40(%rsi)
+	jle		R5
+	iaddq 	$1, %rax
+R5:
+	mrmovq	32(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 32(%rsi)
+	jle		R4
+	iaddq 	$1, %rax
+R4:
+	mrmovq	24(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 24(%rsi)
+	jle		R3
+	iaddq 	$1, %rax
+R3:
+	mrmovq	16(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 16(%rsi)
+	jle		R2
+	iaddq 	$1, %rax
+R2:
+	mrmovq	8(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 8(%rsi)
+	jle		R1
+	iaddq 	$1, %rax
+R1:
+	mrmovq	(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, (%rsi)
+	jle		Done
+	iaddq 	$1, %rax
+```
+
+测试结果：
+
+```bash
+Average CPE     7.87
+Score   52.5/60.0
+```

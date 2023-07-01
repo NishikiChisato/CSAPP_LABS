@@ -1,11 +1,11 @@
 #######################################################################
-# Test for copying block of size 2;
+# Test for copying block of size 9;
 #######################################################################
 	.pos 0
 main:	irmovq Stack, %rsp  	# Set up stack pointer
 
 	# Set up arguments for copy function and then invoke it
-	irmovq $2, %rdx		# src and dst have 2 elements
+	irmovq $9, %rdx		# src and dst have 9 elements
 	irmovq dest, %rsi	# dst array
 	irmovq src, %rdi	# src array
 	call ncopy		 
@@ -31,52 +31,142 @@ ncopy:
 # You can modify this portion
 
 # Loop header
-    xorq 	%rax,%rax      
-    xorq 	%r13, %r13	# i = 0
-	rrmovq 	%rdx, %r14
-	iaddq 	$-1, %r14	# limit
-	jmp 	Test1
+    xorq 	%rax,%rax
+	iaddq 	$-8, %rdx
+	jl 		Root		# len < 8
+	
 Loop1:
+
 	mrmovq 	(%rdi), %r8
+	mrmovq 	8(%rdi), %r9
 	andq 	%r8, %r8
 	rmmovq 	%r8, (%rsi)
+	rmmovq 	%r9, 8(%rsi)
 	jle 	Loop2
 	iaddq 	$1, %rax
 Loop2:
-	mrmovq 	8(%rdi), %r9
 	andq 	%r9, %r9
-	rmmovq 	%r8, 8(%rsi)
+	jle 	Loop3
+	iaddq 	$1, %rax
+Loop3:
+	mrmovq 	16(%rdi), %r8
+	mrmovq 	24(%rdi), %r9	
+	andq 	%r8, %r8
+	rmmovq 	%r8, 16(%rsi)
+	rmmovq 	%r9, 24(%rsi)	
+	jle 	Loop4
+	iaddq 	$1, %rax
+Loop4:
+	andq 	%r9, %r9
+	jle 	Loop5
+	iaddq 	$1, %rax
+Loop5:
+	mrmovq 	32(%rdi), %r8
+	mrmovq 	40(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 32(%rsi)
+	rmmovq 	%r9, 40(%rsi)	
+	jle 	Loop6
+	iaddq 	$1, %rax
+Loop6:
+	andq 	%r9, %r9
+	jle 	Loop7
+	iaddq 	$1, %rax
+Loop7:
+	mrmovq 	48(%rdi), %r8
+	mrmovq 	56(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 48(%rsi)
+	rmmovq 	%r9, 56(%rsi)	
 	jle 	Update
 	iaddq 	$1, %rax
-Update:
 
-	iaddq 	$16, %rdi
-	iaddq 	$16, %rsi
-	iaddq 	$2, %r13
+
+Update:
+	iaddq 	$64, %rdi
+	iaddq 	$64, %rsi
 
 Test1:
-	subq 	%r14, %r13
-	jl 		Loop1
-	addq 	%r14, %r13
+	iaddq 	$-8, %rdx	# len - 8
+	jge		Loop1		
 
-	jmp 	Test2
+# len in [0, 1, ..., 7]
 
-Last1:
-	addq 	%r13, %rax
+Root:
+	iaddq	$4, %rdx
+	jl		Left		# len < 4
+	jg 		Right		# len > 4	
+	je 		R4			# len = 4
 
-	mrmovq 	(%rdi), %r8
+# len in [0, 1, 2, 3]
+Left:
+	iaddq 	$1, %rdx
+	je		R3			# len = 3
+	iaddq	$1, %rdx	
+	je		R2			# len = 2
+	iaddq	$1, %rdx
+	je 		R1			# len = 1
+	iaddq	$1, %rdx
+	je		Done
+
+
+# len in [5, 6, 7]
+Right:
+	iaddq 	$-1, %rdx
+	je		R5			# len = 5
+	iaddq	$-1, %rdx
+	je		R6			# len = 6
+	iaddq	$-1, %rdx
+	je 		R7			# len = 7
+
+R7:
+	mrmovq	48(%rdi), %r8
 	andq 	%r8, %r8
+	rmmovq	%r8, 48(%rsi)
+R6:
+	mrmovq 	40(%rdi), %r8
+	jle 	R61
+	iaddq	$1, %rax
+R61:
+	rmmovq	%r8, 40(%rsi)
+	andq 	%r8, %r8
+R5:
+	mrmovq	32(%rdi), %r8
+	jle 	R51
+	iaddq	$1, %rax
+R51:
+	rmmovq	%r8, 32(%rsi)
+	andq	%r8, %r8
+R4:
+	mrmovq	24(%rdi), %r8
+	jle 	R41
+	iaddq	$1, %rax
+R41:
+	rmmovq	%r8, 24(%rsi)
+	andq	%r8, %r8
+R3:
+	mrmovq	16(%rdi), %r8
+	jle 	R31
+	iaddq	$1, %rax
+R31:
+	rmmovq	%r8, 16(%rsi)
+	andq	%r8, %r8
+R2:
+	mrmovq	8(%rdi), %r8
+	jle 	R21
+	iaddq	$1, %rax
+R21:
+	rmmovq	%r8, 8(%rsi)
+	andq	%r8, %r8
+R1:
+	mrmovq 	(%rdi), %r8
+	jle 	R11
+	iaddq	$1, %rax
+R11:
 	rmmovq 	%r8, (%rsi)
-	jle 	Last2
-	iaddq 	$1, %rax
-Last2:
-	iaddq 	$8, %rdi
-	iaddq 	$8, %rsi
-	iaddq 	$1, %r13
-
-Test2:
-	subq 	%r13, %rdx
-	jg 		Last1
+	andq 	%r8, %r8
+	jle 	Done
+	iaddq	$1, %rax
 
 
 
@@ -96,7 +186,7 @@ EndFun:
 
 # This is the correctness checking code.
 # It checks:
-#   1. %rax has 0.  Set %rax to 0xbbbb if not.
+#   1. %rax has 4.  Set %rax to 0xbbbb if not.
 #   2. The total length of the code is less than or equal to 1000.
 #      Set %rax to 0xcccc if not.
 #   3. The source data was copied to the destination.
@@ -106,7 +196,7 @@ EndFun:
 # If all checks pass, then sets %rax to 0xaaaa
 check:
 	# Return value test
-	irmovq $0,%r10
+	irmovq $4,%r10
 	subq %r10,%rax
 	je checkb
 	irmovq $0xbbbb,%rax  # Failed test #1
@@ -124,7 +214,7 @@ checkb:
 checkm:
 	irmovq dest, %rdx # Pointer to next destination location
 	irmovq src,%rbx   # Pointer to next source location
-	irmovq $2,%rdi  # Count
+	irmovq $9,%rdi  # Count
 	andq %rdi,%rdi
 	je checkpre         # Skip check if count = 0
 mcloop:
@@ -171,13 +261,27 @@ cdone:
 	.align 8
 src:
 	.quad -1
-	.quad -2
+	.quad 2
+	.quad -3
+	.quad -4
+	.quad 5
+	.quad -6
+	.quad 7
+	.quad 8
+	.quad -9
 	.quad 0xbcdefa # This shouldn't get moved
 
 	.align 16
 Predest:
 	.quad 0xbcdefa
 dest:
+	.quad 0xcdefab
+	.quad 0xcdefab
+	.quad 0xcdefab
+	.quad 0xcdefab
+	.quad 0xcdefab
+	.quad 0xcdefab
+	.quad 0xcdefab
 	.quad 0xcdefab
 	.quad 0xcdefab
 Postdest:
