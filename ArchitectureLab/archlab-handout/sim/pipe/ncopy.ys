@@ -15,24 +15,145 @@ ncopy:
 
 ##################################################################
 # You can modify this portion
-	# Loop header
-	xorq %rax,%rax		# count = 0;
-	andq %rdx,%rdx		# len <= 0?
-	jle Done		# if so, goto Done:
 
-Loop:	mrmovq (%rdi), %r10	# read val from src...
-	rmmovq %r10, (%rsi)	# ...and store it to dst
-	andq %r10, %r10		# val <= 0?
-	jle Npos		# if so, goto Npos:
-	irmovq $1, %r10
-	addq %r10, %rax		# count++
-Npos:	irmovq $1, %r10
-	subq %r10, %rdx		# len--
-	irmovq $8, %r10
-	addq %r10, %rdi		# src++
-	addq %r10, %rsi		# dst++
-	andq %rdx,%rdx		# len > 0?
-	jg Loop			# if so, goto Loop:
+# Loop header
+    # xorq 	%rax,%rax
+	iaddq 	$-8, %rdx
+	jl 		Root		# len < 8
+	
+Loop1:
+
+	mrmovq 	(%rdi), %r8
+	mrmovq 	8(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, (%rsi)
+	rmmovq 	%r9, 8(%rsi)
+	jle 	Loop2
+	iaddq 	$1, %rax
+Loop2:
+	andq 	%r9, %r9
+	jle 	Loop3
+	iaddq 	$1, %rax
+Loop3:
+	mrmovq 	16(%rdi), %r8
+	mrmovq 	24(%rdi), %r9	
+	andq 	%r8, %r8
+	rmmovq 	%r8, 16(%rsi)
+	rmmovq 	%r9, 24(%rsi)	
+	jle 	Loop4
+	iaddq 	$1, %rax
+Loop4:
+	andq 	%r9, %r9
+	jle 	Loop5
+	iaddq 	$1, %rax
+Loop5:
+	mrmovq 	32(%rdi), %r8
+	mrmovq 	40(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 32(%rsi)
+	rmmovq 	%r9, 40(%rsi)	
+	jle 	Loop6
+	iaddq 	$1, %rax
+Loop6:
+	andq 	%r9, %r9
+	jle 	Loop7
+	iaddq 	$1, %rax
+Loop7:
+	mrmovq 	48(%rdi), %r8
+	mrmovq 	56(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 48(%rsi)
+	rmmovq 	%r9, 56(%rsi)	
+	jle 	Update
+	iaddq 	$1, %rax
+
+
+Update:
+	iaddq 	$64, %rdi
+	iaddq 	$64, %rsi
+
+Test1:
+	iaddq 	$-8, %rdx	# len - 10
+	jge		Loop1		
+
+# len in [0, 1, ..., 7]
+
+Root:
+	iaddq 	$8, %rdx
+	je 		Done
+	iaddq	$-4, %rdx
+	jl		Left		# len < 4
+	je 		R4			# len = 4
+	jg 		Right		# len > 4
+
+# len in [1, 2, 3]
+Left:
+	iaddq 	$2, %rdx
+	jl 		R1 			# len = 1
+	je 		R2 			# len = 2
+	jg 		R3 			# len = 3
+
+# len in [5, 6, 7]
+Right:
+	iaddq 	$-1, %rdx
+	jl 		R5			# len = 5
+	je 		R6			# len = 6
+	jg 		R7			# len = 7
+
+
+
+R7:
+	mrmovq	48(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 48(%rsi)
+R6:
+	mrmovq 	40(%rdi), %r9
+	jle 	R61
+	iaddq	$1, %rax
+R61:
+	rmmovq	%r9, 40(%rdi)
+	andq 	%r9, %r9
+	jle 	R5
+	iaddq	$1, %rax
+
+R5:
+	mrmovq	32(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 32(%rsi)
+R4:
+	mrmovq 	24(%rdi), %r9
+	jle 	R41
+	iaddq	$1, %rax
+R41:
+	rmmovq	%r9, 24(%rdi)
+	andq 	%r9, %r9
+	jle 	R3
+	iaddq	$1, %rax
+
+R3:
+	mrmovq	16(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 16(%rsi)
+R2:
+	mrmovq 	8(%rdi), %r9
+	jle 	R21
+	iaddq	$1, %rax
+R21:
+	rmmovq	%r9, 8(%rdi)
+	andq 	%r9, %r9
+	jle 	R1
+	iaddq	$1, %rax
+
+R1:
+	mrmovq 	(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, (%rsi)
+	jle 	Done
+	iaddq 	$1, %rax
+
+
+
+
 ##################################################################
 # Do not modify the following section of code
 # Function epilogue.
