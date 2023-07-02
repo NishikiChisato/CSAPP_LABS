@@ -938,72 +938,7 @@ Test1:
 运行结果：
 
 ```bash
-        ncopy
-0       22
-1       31      31.00
-2       43      21.50
-3       52      17.33
-4       64      16.00
-5       73      14.60
-6       59      9.83
-7       68      9.71
-8       80      10.00
-9       89      9.89
-10      101     10.10
-11      110     10.00
-12      96      8.00
-13      105     8.08
-14      117     8.36
-15      126     8.40
-16      138     8.62
-17      147     8.65
-18      133     7.39
-19      142     7.47
-20      154     7.70
-21      163     7.76
-22      175     7.95
-23      184     8.00
-24      170     7.08
-25      179     7.16
-26      191     7.35
-27      200     7.41
-28      212     7.57
-29      221     7.62
-30      207     6.90
-31      216     6.97
-32      228     7.12
-33      237     7.18
-34      249     7.32
-35      258     7.37
-36      244     6.78
-37      253     6.84
-38      265     6.97
-39      274     7.03
-40      286     7.15
-41      295     7.20
-42      281     6.69
-43      290     6.74
-44      302     6.86
-45      311     6.91
-46      323     7.02
-47      332     7.06
-48      318     6.62
-49      327     6.67
-50      339     6.78
-51      348     6.82
-52      360     6.92
-53      369     6.96
-54      355     6.57
-55      364     6.62
-56      376     6.71
-57      385     6.75
-58      397     6.84
-59      406     6.88
-60      392     6.53
-61      401     6.57
-62      413     6.66
-63      422     6.70
-64      434     6.78
+
 Average CPE     8.45
 Score   40.9/60.0
 ```
@@ -1151,3 +1086,505 @@ R1:
 Average CPE     7.87
 Score   52.5/60.0
 ```
+
+```assembly
+# Loop header
+    #xorq 	%rax,%rax
+	iaddq 	$-10, %rdx
+	jl 		Root		# len < 8
+	
+Loop1:
+
+	mrmovq 	(%rdi), %r8
+	mrmovq 	8(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, (%rsi)
+	rmmovq 	%r9, 8(%rsi)
+	jle 	Loop2
+	iaddq 	$1, %rax
+Loop2:
+	andq 	%r9, %r9
+	jle 	Loop3
+	iaddq 	$1, %rax
+Loop3:
+	mrmovq 	16(%rdi), %r8
+	mrmovq 	24(%rdi), %r9	
+	andq 	%r8, %r8
+	rmmovq 	%r8, 16(%rsi)
+	rmmovq 	%r9, 24(%rsi)	
+	jle 	Loop4
+	iaddq 	$1, %rax
+Loop4:
+	andq 	%r9, %r9
+	jle 	Loop5
+	iaddq 	$1, %rax
+Loop5:
+	mrmovq 	32(%rdi), %r8
+	mrmovq 	40(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 32(%rsi)
+	rmmovq 	%r9, 40(%rsi)	
+	jle 	Loop6
+	iaddq 	$1, %rax
+Loop6:
+	andq 	%r9, %r9
+	jle 	Loop7
+	iaddq 	$1, %rax
+Loop7:
+	mrmovq 	48(%rdi), %r8
+	mrmovq 	56(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 48(%rsi)
+	rmmovq 	%r9, 56(%rsi)	
+	jle 	Loop8
+	iaddq 	$1, %rax
+Loop8:
+	andq 	%r9, %r9
+	jle 	Loop9
+	iaddq 	$1, %rax
+
+Loop9:
+	mrmovq 	64(%rdi), %r8
+	mrmovq 	72(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 64(%rsi)
+	rmmovq	%r9, 72(%rsi)
+	jle 	Loop10
+	iaddq 	$1, %rax
+Loop10:
+	andq	%r9, %r9
+	jle 	Update
+	iaddq	$1, %rax
+
+Update:
+	iaddq 	$80, %rdi
+	iaddq 	$80, %rsi
+
+Test1:
+	iaddq 	$-10, %rdx	# len - 8
+	jge		Loop1		
+
+
+# len in [0, 1, ..., 9]
+Root:
+	iaddq	$6, %rdx
+	jl		Left		# len < 4
+	jg 		Right		# len > 4	
+	je 		R4			# len = 4
+
+# len in [0, 1, 2, 3]
+Left:
+	iaddq 	$2, %rdx
+	jg		R3			# len = 3
+	je		R2			# len = 2
+	iaddq	$1, %rdx
+	je 		R1			# len = 1
+	jl		Done		# len = 0
+
+
+# len in [5, 6, 7, 8, 9]
+Right:
+	iaddq 	$-2, %rdx
+	jl		R5			# len = 5
+	je		R6			# len = 6
+	iaddq	$-1, %rdx
+	je 		R7			# len = 7
+	iaddq 	$-1, %rdx
+	je 		R8			# len = 8
+
+R9:
+	mrmovq	64(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 64(%rsi)
+	jle		R8
+	iaddq 	$1, %rax
+R8:
+	mrmovq	56(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 56(%rsi)
+	jle		R7
+	iaddq 	$1, %rax
+R7:
+	mrmovq	48(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 48(%rsi)
+	jle		R6
+	iaddq 	$1, %rax
+R6:
+	mrmovq	40(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 40(%rsi)
+	jle		R5
+	iaddq 	$1, %rax
+R5:
+	mrmovq	32(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 32(%rsi)
+	jle		R4
+	iaddq 	$1, %rax
+R4:
+	mrmovq	24(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 24(%rsi)
+	jle		R3
+	iaddq 	$1, %rax
+R3:
+	mrmovq	16(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 16(%rsi)
+	jle		R2
+	iaddq 	$1, %rax
+R2:
+	mrmovq	8(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 8(%rsi)
+	jle		R1
+	iaddq 	$1, %rax
+R1:
+	mrmovq	(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, (%rsi)
+	jle		Done
+	iaddq 	$1, %rax
+```
+
+测试结果：
+
+```bash
+        ncopy
+0       26
+1       28      28.00
+2       32      16.00
+3       34      11.33
+4       46      11.50
+5       50      10.00
+6       61      10.17
+7       70      10.00
+8       82      10.25
+9       89      9.89
+10      89      8.90
+11      91      8.27
+12      95      7.92
+13      97      7.46
+14      109     7.79
+15      113     7.53
+16      124     7.75
+17      133     7.82
+18      145     8.06
+19      152     8.00
+20      148     7.40
+21      150     7.14
+22      154     7.00
+23      156     6.78
+24      168     7.00
+25      172     6.88
+26      183     7.04
+27      192     7.11
+28      204     7.29
+29      211     7.28
+30      207     6.90
+31      209     6.74
+32      213     6.66
+33      215     6.52
+34      227     6.68
+35      231     6.60
+36      242     6.72
+37      251     6.78
+38      263     6.92
+39      270     6.92
+40      266     6.65
+41      268     6.54
+42      272     6.48
+43      274     6.37
+44      286     6.50
+45      290     6.44
+46      301     6.54
+47      310     6.60
+48      322     6.71
+49      329     6.71
+50      325     6.50
+51      327     6.41
+52      331     6.37
+53      333     6.28
+54      345     6.39
+55      349     6.35
+56      360     6.43
+57      369     6.47
+58      381     6.57
+59      388     6.58
+60      384     6.40
+61      386     6.33
+62      390     6.29
+63      392     6.22
+64      404     6.31
+Average CPE     7.76
+Score   54.9/60.0
+```
+
+上面的代码中，在
+
+```assembly
+R9:
+	mrmovq	64(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 64(%rsi)
+	jle		R8
+	iaddq 	$1, %rax
+```
+
+当中还是插入了一个气泡，这是因为第一条语句对 `%r8` 进行写入后，第二条语句马上就要使用
+
+**我们必须在 `mrmovq` 到达访存阶段时，才能执行 `andq` 的译码阶段**
+
+我们考虑去消除这个气泡，由于每一个循环必须要执行 `5` 条指令，因此如果我们当前这个循环执行的是上一条语句的跳转指令的话，也就可以避免当前循环中跳转指令与访存指令的冲突
+
+这样有一个问题是，当前周期会执行一次上一周期的跳转，为了避免执行该额外的跳转，我们的控制逻辑需要**保证每次跳转的状态码都是小于等于零**
+
+```assembly
+# Loop header
+    #xorq 	%rax,%rax
+	iaddq 	$-10, %rdx
+	jl 		Root		# len < 8
+	
+Loop1:
+
+	mrmovq 	(%rdi), %r8
+	mrmovq 	8(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, (%rsi)
+	rmmovq 	%r9, 8(%rsi)
+	jle 	Loop2
+	iaddq 	$1, %rax
+Loop2:
+	andq 	%r9, %r9
+	jle 	Loop3
+	iaddq 	$1, %rax
+Loop3:
+	mrmovq 	16(%rdi), %r8
+	mrmovq 	24(%rdi), %r9	
+	andq 	%r8, %r8
+	rmmovq 	%r8, 16(%rsi)
+	rmmovq 	%r9, 24(%rsi)	
+	jle 	Loop4
+	iaddq 	$1, %rax
+Loop4:
+	andq 	%r9, %r9
+	jle 	Loop5
+	iaddq 	$1, %rax
+Loop5:
+	mrmovq 	32(%rdi), %r8
+	mrmovq 	40(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 32(%rsi)
+	rmmovq 	%r9, 40(%rsi)	
+	jle 	Loop6
+	iaddq 	$1, %rax
+Loop6:
+	andq 	%r9, %r9
+	jle 	Loop7
+	iaddq 	$1, %rax
+Loop7:
+	mrmovq 	48(%rdi), %r8
+	mrmovq 	56(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 48(%rsi)
+	rmmovq 	%r9, 56(%rsi)	
+	jle 	Loop8
+	iaddq 	$1, %rax
+Loop8:
+	andq 	%r9, %r9
+	jle 	Loop9
+	iaddq 	$1, %rax
+
+Loop9:
+	mrmovq 	64(%rdi), %r8
+	mrmovq 	72(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 64(%rsi)
+	rmmovq	%r9, 72(%rsi)
+	jle 	Loop10
+	iaddq 	$1, %rax
+Loop10:
+	andq	%r9, %r9
+	jle 	Update
+	iaddq	$1, %rax
+
+Update:
+	iaddq 	$80, %rdi
+	iaddq 	$80, %rsi
+
+Test1:
+	iaddq 	$-10, %rdx	# len - 8
+	jge		Loop1		
+
+
+# len in [0, 1, ..., 9]
+Root:
+	iaddq	$6, %rdx	# len - 4
+	jl		Left			# len < 4
+	jg 		Right			# len > 4	
+	je 		R4				# len = 4
+
+# len in [0, 1, 2, 3]
+Left:
+	iaddq 	$1, %rdx	# len - 3
+	je		R3				# len = 3
+	iaddq	$1, %rdx	# len - 2
+	je		R2				# len = 2
+	iaddq	$1, %rdx	# len - 1
+	je 		R1				# len = 1
+	ret
+
+
+# len in [5, 6, 7, 8, 9]
+Right:
+	iaddq 	$-2, %rdx	# len - 6
+	jl		R5				# len = 5
+	je		R6				# len = 6
+	iaddq	$-1, %rdx	# len - 7
+	je 		R7				# len = 7
+	iaddq 	$-1, %rdx	# len - 8
+	je 		R8				# len = 8
+
+
+
+R9:
+	mrmovq	64(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 64(%rsi)
+R8:
+	mrmovq	56(%rdi), %r8
+	jle		R81
+	iaddq 	$1, %rax
+R81:
+	rmmovq	%r8, 56(%rsi)
+	andq 	%r8, %r8
+R7:
+	mrmovq	48(%rdi), %r8
+	jle		R71
+	iaddq 	$1, %rax
+R71:
+	rmmovq	%r8, 48(%rsi)
+	andq 	%r8, %r8
+R6:
+	mrmovq	40(%rdi), %r8
+	jle		R61
+	iaddq 	$1, %rax
+R61:
+	rmmovq	%r8, 40(%rsi)	
+	andq 	%r8, %r8
+R5:
+	mrmovq	32(%rdi), %r8
+	jle		R51
+	iaddq 	$1, %rax
+R51:
+	rmmovq	%r8, 32(%rsi)
+	andq 	%r8, %r8
+R4:
+	mrmovq	24(%rdi), %r8
+	jle		R41
+	iaddq 	$1, %rax
+R41:
+	rmmovq	%r8, 24(%rsi)
+	andq 	%r8, %r8
+R3:
+	mrmovq	16(%rdi), %r8
+	jle		R31
+	iaddq 	$1, %rax
+R31:
+	rmmovq	%r8, 16(%rsi)
+	andq 	%r8, %r8
+R2:
+	mrmovq	8(%rdi), %r8
+	jle		R21
+	iaddq 	$1, %rax
+R21:
+	rmmovq	%r8, 8(%rsi)
+	andq 	%r8, %r8
+R1:
+	mrmovq	(%rdi), %r8
+	jle		R11
+	iaddq 	$1, %rax
+R11:
+	andq 	%r8, %r8
+	rmmovq	%r8, (%rsi)
+	jle		Done
+	iaddq 	$1, %rax
+```
+
+测试结果：
+
+```bash
+        ncopy
+0       26
+1       29      29.00
+2       32      16.00
+3       32      10.67
+4       43      10.75
+5       46      9.20
+6       56      9.33
+7       64      9.14
+8       75      9.38
+9       81      9.00
+10      89      8.90
+11      92      8.36
+12      95      7.92
+13      95      7.31
+14      106     7.57
+15      109     7.27
+16      119     7.44
+17      127     7.47
+18      138     7.67
+19      144     7.58
+20      148     7.40
+21      151     7.19
+22      154     7.00
+23      154     6.70
+24      165     6.88
+25      168     6.72
+26      178     6.85
+27      186     6.89
+28      197     7.04
+29      203     7.00
+30      207     6.90
+31      210     6.77
+32      213     6.66
+33      213     6.45
+34      224     6.59
+35      227     6.49
+36      237     6.58
+37      245     6.62
+38      256     6.74
+39      262     6.72
+40      266     6.65
+41      269     6.56
+42      272     6.48
+43      272     6.33
+44      283     6.43
+45      286     6.36
+46      296     6.43
+47      304     6.47
+48      315     6.56
+49      321     6.55
+50      325     6.50
+51      328     6.43
+52      331     6.37
+53      331     6.25
+54      342     6.33
+55      345     6.27
+56      355     6.34
+57      363     6.37
+58      374     6.45
+59      380     6.44
+60      384     6.40
+61      387     6.34
+62      390     6.29
+63      390     6.19
+64      401     6.27
+Average CPE     7.60
+Score   58.1/60.0
+```
+
+这个代码的长度达到了 `999` 个字节，已经是达到极限了
+
+如果需要继续优化的话，可以从控制逻辑上下手

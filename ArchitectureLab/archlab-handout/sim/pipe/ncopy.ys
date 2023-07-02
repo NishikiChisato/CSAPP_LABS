@@ -17,8 +17,8 @@ ncopy:
 # You can modify this portion
 
 # Loop header
-    xorq 	%rax,%rax
-	iaddq 	$-8, %rdx
+    #xorq 	%rax,%rax
+	iaddq 	$-10, %rdx
 	jl 		Root		# len < 8
 	
 Loop1:
@@ -68,89 +68,123 @@ Loop7:
 	iaddq 	$1, %rax
 Loop8:
 	andq 	%r9, %r9
-	jle 	Update
+	jle 	Loop9
 	iaddq 	$1, %rax
 
+Loop9:
+	mrmovq 	64(%rdi), %r8
+	mrmovq 	72(%rdi), %r9
+	andq 	%r8, %r8
+	rmmovq 	%r8, 64(%rsi)
+	rmmovq	%r9, 72(%rsi)
+	jle 	Loop10
+	iaddq 	$1, %rax
+Loop10:
+	andq	%r9, %r9
+	jle 	Update
+	iaddq	$1, %rax
+
 Update:
-	iaddq 	$64, %rdi
-	iaddq 	$64, %rsi
+	iaddq 	$80, %rdi
+	iaddq 	$80, %rsi
 
 Test1:
-	iaddq 	$-8, %rdx	# len - 8
+	iaddq 	$-10, %rdx	# len - 8
 	jge		Loop1		
 
 
-# len in [0, 1, ..., 7]
+# len in [0, 1, ..., 9]
 Root:
-	iaddq	$4, %rdx
-	jl		Left		# len < 4
-	jg 		Right		# len > 4	
-	je 		R4			# len = 4
+	iaddq	$6, %rdx	# len - 4
+	jl		Left			# len < 4
+	jg 		Right			# len > 4	
+	je 		R4				# len = 4
 
 # len in [0, 1, 2, 3]
 Left:
-	iaddq 	$1, %rdx
-	je		R3			# len = 3
-	iaddq	$1, %rdx	
-	je		R2			# len = 2
-	iaddq	$1, %rdx
-	je 		R1			# len = 1
-	iaddq	$1, %rdx
-	je		Done
+	iaddq 	$1, %rdx	# len - 3
+	je		R3				# len = 3
+	iaddq	$1, %rdx	# len - 2
+	je		R2				# len = 2
+	iaddq	$1, %rdx	# len - 1
+	je 		R1				# len = 1
+	ret
 
 
-# len in [5, 6, 7]
+# len in [5, 6, 7, 8, 9]
 Right:
-	iaddq 	$-1, %rdx
-	je		R5			# len = 5
-	iaddq	$-1, %rdx
-	je		R6			# len = 6
-	iaddq	$-1, %rdx
-	je 		R7			# len = 7
+	iaddq 	$-2, %rdx	# len - 6
+	jl		R5				# len = 5
+	je		R6				# len = 6
+	iaddq	$-1, %rdx	# len - 7
+	je 		R7				# len = 7
+	iaddq 	$-1, %rdx	# len - 8
+	je 		R8				# len = 8
 
+
+
+R9:
+	mrmovq	64(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq	%r8, 64(%rsi)
+R8:
+	mrmovq	56(%rdi), %r8
+	jle		R81
+	iaddq 	$1, %rax
+R81:
+	rmmovq	%r8, 56(%rsi)
+	andq 	%r8, %r8
 R7:
 	mrmovq	48(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 48(%rsi)
-	jle		R6
+	jle		R71
 	iaddq 	$1, %rax
+R71:
+	rmmovq	%r8, 48(%rsi)
+	andq 	%r8, %r8
 R6:
 	mrmovq	40(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 40(%rsi)
-	jle		R5
+	jle		R61
 	iaddq 	$1, %rax
+R61:
+	rmmovq	%r8, 40(%rsi)	
+	andq 	%r8, %r8
 R5:
 	mrmovq	32(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 32(%rsi)
-	jle		R4
+	jle		R51
 	iaddq 	$1, %rax
+R51:
+	rmmovq	%r8, 32(%rsi)
+	andq 	%r8, %r8
 R4:
 	mrmovq	24(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 24(%rsi)
-	jle		R3
+	jle		R41
 	iaddq 	$1, %rax
+R41:
+	rmmovq	%r8, 24(%rsi)
+	andq 	%r8, %r8
 R3:
 	mrmovq	16(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 16(%rsi)
-	jle		R2
+	jle		R31
 	iaddq 	$1, %rax
+R31:
+	rmmovq	%r8, 16(%rsi)
+	andq 	%r8, %r8
 R2:
 	mrmovq	8(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq	%r8, 8(%rsi)
-	jle		R1
+	jle		R21
 	iaddq 	$1, %rax
+R21:
+	rmmovq	%r8, 8(%rsi)
+	andq 	%r8, %r8
 R1:
 	mrmovq	(%rdi), %r8
+	jle		R11
+	iaddq 	$1, %rax
+R11:
 	andq 	%r8, %r8
 	rmmovq	%r8, (%rsi)
 	jle		Done
 	iaddq 	$1, %rax
-
 
 ##################################################################
 # Do not modify the following section of code
