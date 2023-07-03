@@ -7,7 +7,7 @@
 * [x] *Data Lab*
 * [x] *Domb Lab*
 * [x] *Attack Lab*
-* [ ] *Architecture Lab*
+* [x] *Architecture Lab*
 * [ ] *Cache Lab*
 * [ ] *Performance Lab*
 * [ ] *Shell Lab*
