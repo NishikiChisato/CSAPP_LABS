@@ -215,9 +215,9 @@
                             | ###############################
 0x420:                      | 	.align 8
 0x420:                      | src:
-0x420: 0100000000000000     | 	.quad 1
+0x420: ffffffffffffffff     | 	.quad -1
 0x428: feffffffffffffff     | 	.quad -2
-0x430: fdffffffffffffff     | 	.quad -3
+0x430: 0300000000000000     | 	.quad 3
 0x438: 0400000000000000     | 	.quad 4
 0x440: fadebc0000000000     | 	.quad 0xbcdefa # This shouldn't get moved
                             | 

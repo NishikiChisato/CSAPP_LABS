@@ -7,6 +7,7 @@
 		- [Part A](#part-a)
 		- [Part B](#part-b)
 		- [Part C](#part-c)
+		- [尾声](#尾声)
 
 
 ## 准备
@@ -643,244 +644,77 @@ Simulating with ../seq/ssim
 
 ### Part C
 
-我们先写一个模块化的 $2\times 1$ 循环展开：
+参照 [PDF](http://csapp.cs.cmu.edu/3e/archlab.pdf) 中 `6` 的部分
 
-```assembly
-# Loop header
-    xorq 	%rax,%rax      
-    xorq 	%r13, %r13	# i = 0
-	rrmovq 	%rdx, %r14
-	iaddq 	$-1, %r14	# limit
-	jmp 	Test1
-Loop1:
-	addq 	%r14, %r13
-	mrmovq 	(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	jle 	Loop2
-	iaddq 	$1, %rax
-Loop2:
-	mrmovq 	8(%rdi), %r9
-	andq 	%r9, %r9
-	rmmovq 	%r9, 8(%rsi)
-	jle 	Update
-	iaddq 	$1, %rax
-Update:
+本阶段需要我们修改 `ncopy.ys` 和 `pipe-full.hcl` ，使得该代码能够尽可能运行的更快
 
-	iaddq 	$16, %rdi
-	iaddq 	$16, %rsi
-	iaddq 	$2, %r13
+我们首先需要修改 `pipe-full.hcl`，使得其能够支持 `iaddq` 指令，这样我们可以少写一条汇编指令
 
-Test1:
-	subq 	%r14, %r13	# i - limit
-	jl 		Loop1
-	addq 	%r14, %r13
-	jmp 	Test2
+修改部分如下：
 
-Last1:
-	addq 	%r13, %rdx
-	mrmovq 	(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	jle 	Last2
-	iaddq 	$1, %rax
-Last2:
-	iaddq 	$8, %rdi
-	iaddq 	$8, %rsi
-	iaddq 	$1, %r13
+```HCL
+# Is instruction valid?
+bool instr_valid = f_icode in 
+	{ INOP, IHALT, IRRMOVQ, IIRMOVQ, IRMMOVQ, IMRMOVQ,
+	  IOPQ, IJXX, ICALL, IRET, IPUSHQ, IPOPQ, IIADDQ };
 
-Test2:
-	subq 	%r13, %rdx
-	jg 		Last1
+# Does fetched instruction require a regid byte?
+bool need_regids =
+	f_icode in { IRRMOVQ, IOPQ, IPUSHQ, IPOPQ, 
+		     IIRMOVQ, IRMMOVQ, IMRMOVQ, IIADDQ };
+
+# Does fetched instruction require a constant word?
+bool need_valC =
+	f_icode in { IIRMOVQ, IRMMOVQ, IMRMOVQ, IJXX, ICALL, IIADDQ };
+
+## What register should be used as the B source?
+word d_srcB = [
+	D_icode in { IOPQ, IRMMOVQ, IMRMOVQ, IIADDQ  } : D_rB;
+	D_icode in { IPUSHQ, IPOPQ, ICALL, IRET } : RRSP;
+	1 : RNONE;  # Don't need register
+];
+
+## What register should be used as the E destination?
+word d_dstE = [
+	D_icode in { IRRMOVQ, IIRMOVQ, IOPQ, IIADDQ } : D_rB;
+	D_icode in { IPUSHQ, IPOPQ, ICALL, IRET } : RRSP;
+	1 : RNONE;  # Don't write any register
+];
+
+## Select input A to ALU
+word aluA = [
+	E_icode in { IRRMOVQ, IOPQ } : E_valA;
+	E_icode in { IIRMOVQ, IRMMOVQ, IMRMOVQ, IIADDQ } : E_valC;
+	E_icode in { ICALL, IPUSHQ } : -8;
+	E_icode in { IRET, IPOPQ } : 8;
+	# Other instructions don't need ALU
+];
+
+## Select input B to ALU
+word aluB = [
+	E_icode in { IRMMOVQ, IMRMOVQ, IOPQ, ICALL, 
+		     IPUSHQ, IRET, IPOPQ, IIADDQ } : E_valB;
+	E_icode in { IRRMOVQ, IIRMOVQ } : 0;
+	# Other instructions don't need ALU
+];
+
+## Set the ALU function
+word alufun = [
+	E_icode == IOPQ : E_ifun;
+	E_icode == IIADDQ : E_ifun;
+	1 : ALUADD;
+];
+
+## Should the condition codes be updated?
+bool set_cc = E_icode == IOPQ || E_icode == IIADDQ &&
+	# State changes only during normal operation
+	!m_stat in { SADR, SINS, SHLT } && !W_stat in { SADR, SINS, SHLT };
 ```
 
-执行：
+这里与 `Part B` 基本一致，只要那个能做，这里也没问题
 
-```bash
-$ ./correctness.pl
-$ ./benchmark.pl 
-Average CPE     11.42
-Score   0.0/60.0
-```
+我们首先给出如下代码：
 
-这里省略 `correctness.pl` 的执行结果，我们两次展开的 `CPE` 为 `11.42`，继续增加展开次数
-
-我们拓展到六次展开（因为这是我们当前的寄存器只能支持我们在不往堆栈内写数据的情况下的最大值）：
-
-> 这里我是想错了,实际 `mrmovq` 的目的寄存器不同并不会提高并发性
->
-> 这是因为 `rmmovq` 最多只会占用目的寄存器一个周期（哪怕后面的指令需要用到目的寄存器，我们只会往流水线中插入一个气泡）
-
-```assembly
-# Loop header
-    xorq 	%rax,%rax      
-    xorq 	%r13, %r13	# i = 0
-	rrmovq 	%rdx, %r14
-	iaddq 	$-5, %r14	# limit
-	jmp 	Test1
-Loop1:
-	addq 	%r14, %r13
-
-	mrmovq 	(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	jle 	Loop2
-	iaddq 	$1, %rax
-Loop2:
-	mrmovq 	8(%rdi), %r9
-	andq 	%r9, %r9
-	rmmovq 	%r9, 8(%rsi)
-	jle 	Loop3
-	iaddq 	$1, %rax
-Loop3:
-	mrmovq 	16(%rdi), %r10
-	andq 	%r10, %r10
-	rmmovq 	%r10, 16(%rsi)
-	jle 	Loop4
-	iaddq 	$1, %rax
-Loop4:
-	mrmovq 	24(%rdi), %r10
-	andq 	%r10, %r10
-	rmmovq 	%r10, 24(%rsi)
-	jle 	Loop5
-	iaddq 	$1, %rax
-Loop5:
-	mrmovq 	32(%rdi), %r11
-	andq 	%r11, %r11
-	rmmovq 	%r11, 32(%rsi)
-	jle 	Loop6
-	iaddq 	$1, %rax
-Loop6:
-	mrmovq 	40(%rdi), %r12
-	andq 	%r12, %r12
-	rmmovq 	%r12, 40(%rsi)
-	jle 	Update
-	iaddq 	$1, %rax
-Update:
-
-	iaddq 	$48, %rdi
-	iaddq 	$48, %rsi
-	iaddq 	$6, %r13
-
-Test1:
-	subq 	%r14, %r13	# i - limit
-	jl 		Loop1
-	addq 	%r14, %r13
-	jmp 	Test2
-
-Last1:
-	addq 	%r13, %rdx
-	mrmovq 	(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	jle 	Last2
-	iaddq 	$1, %rax
-Last2:
-	iaddq 	$8, %rdi
-	iaddq 	$8, %rsi
-	iaddq 	$1, %r13
-
-Test2:
-	subq 	%r13, %rdx	# len - i
-	jg 		Last1
-```
-
-得到的结果为：
-
-```bash
-Average CPE     10.12
-Score   7.6/60.0
-```
-
-我们考虑每次从内存当中读取两个数，以此来减小气泡和增大并发性：
-
-```assbegly
-# Loop header
-    xorq 	%rax,%rax      
-    xorq 	%r13, %r13	# i = 0
-	rrmovq 	%rdx, %r14
-	iaddq 	$-5, %r14	# limit
-	jmp 	Test1
-Loop1:
-	addq 	%r14, %r13
-
-	mrmovq 	(%rdi), %r8
-	mrmovq 	8(%rdi), %r9	
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	rmmovq 	%r9, 8(%rsi)	
-	jle 	Loop2
-	iaddq 	$1, %rax
-Loop2:
-	andq 	%r9, %r9
-	jle 	Loop3
-	iaddq 	$1, %rax
-Loop3:
-	mrmovq 	16(%rdi), %r10
-	mrmovq 	24(%rdi), %r11	
-	andq 	%r10, %r10
-	rmmovq 	%r10, 16(%rsi)
-	rmmovq 	%r11, 24(%rsi)	
-	jle 	Loop4
-	iaddq 	$1, %rax
-Loop4:
-	andq 	%r11, %r11
-	jle 	Loop5
-	iaddq 	$1, %rax
-Loop5:
-	mrmovq 	32(%rdi), %r12
-	mrmovq 	40(%rdi), %rbx	
-	andq 	%r12, %r12
-	rmmovq 	%r12, 32(%rsi)
-	rmmovq 	%rbx, 40(%rsi)	
-	jle 	Loop6
-	iaddq 	$1, %rax
-Loop6:
-	andq 	%rbx, %rbx
-	jle 	Update
-	iaddq 	$1, %rax
-Update:
-
-	iaddq 	$48, %rdi
-	iaddq 	$48, %rsi
-	iaddq 	$6, %r13
-
-Test1:
-	subq 	%r14, %r13	# i - limit
-	jl 		Loop1
-	addq 	%r14, %r13
-	jmp 	Test2
-
-# Test2 block
-
-Last1:
-	addq 	%r13, %rdx
-
-	mrmovq 	(%rdi), %r8
-	andq 	%r8, %r8
-	rmmovq 	%r8, (%rsi)
-	jle 	Last2
-	iaddq 	$1, %rax
-Last2:
-	iaddq 	$8, %rdi
-	iaddq 	$8, %rsi
-	iaddq 	$1, %r13
-
-Test2:
-	subq 	%r13, %rdx	# len - i
-	jg 		Last1
-```
-
-运行结果：
-
-```bash
-Average CPE     9.29
-Score   24.3/60.0
-```
-
-我们发现这个提示并不明显，我们考虑将 `i` 和 `limit` 去掉，重新设计整个的循环，这样可以减少一些指令的执行
-
-> 我们在循环展开时，每次展开只需要使用两个寄存器即可
 
 ```assembly
 # Loop header
@@ -933,15 +767,48 @@ Test1:
 	jge		Loop1
 	iaddq 	$6, %rdx
 	jmp 	Test2
+
+# Test2 block
+
+Last1:
+
+	mrmovq 	(%rdi), %r8
+	andq 	%r8, %r8
+	rmmovq 	%r8, (%rsi)
+	jle 	Last2
+	iaddq 	$1, %rax
+Last2:
+	iaddq 	$8, %rdi
+	iaddq 	$8, %rsi
+
+Test2:
+	iaddq 	$-1, %rdx	
+	jge 		Last1
 ```
 
 运行结果：
 
 ```bash
-
+./benchmark.pl
 Average CPE     8.45
 Score   40.9/60.0
 ```
+
+需要说明的几点：
+
+* 这里我们循环展开的此时为 `6` 次，可以继续增大展开次数以此提升 `CPE`
+  * 循环展开**并不会降低总的操作次数**，只会**降低循环的次数**，循环的索引计算和分支计算都会减少
+* 在单个 `Loop` 中，我们连续对两个内存进行读取，随后再执行判断语句。这么做是为了消除加载/使用冒险
+  * 如果前一条语句从内存当中读取某个值到寄存器，下一条马上使用该寄存器，那么流水线控制逻辑会在其中插入一个气泡。使得当前一条指令进入写回阶段时，后一条指令进入译码阶段
+* 我们直接使用 `len` 是否小于零来进行循环次数的判断，这样可以执行更少的指令
+
+我们从循环展开部分的代码可以得知，**对单个元素进行操作时，必须要执行五条汇编指令**
+
+上面代码的问题是，我们六路循环展开后会得到一些剩余元素，元素个数为从 `0` 到 `5` ，我们对这些元素采取的是循环的方式
+
+我们知道，循环是会产生额外的判断和索引计算，因此对于最后的元素，根据其执行次数不同，我们可以将其**倒序**进行排列，然后依据剩余元素个数跳转到对应的位置即可
+
+我们将循环展开的次数提升到八次，写出如下代码：
 
 ```assembly
 # Loop header
@@ -1086,6 +953,14 @@ R1:
 Average CPE     7.87
 Score   52.5/60.0
 ```
+
+需要说明的是：
+ 
+* 数据的输入个数为 `0` 到 `64` ，并且我们是求每次算出来的 `CPE` 的平均值，因此所有数量的权重相同，我们应当尽可能减小余数为 `0, 1, 2, 4` 的 `CPE`，也就是让这些情况提前跳转
+
+* 在控制逻辑的跳转部分，我们先让 `2` 和 `3` 进行跳转，随后才是 `1`，这样子总的 `CPE` 会更小
+
+可以看到这次的 `CPE` 有了很大的提升，我们将循环展开增加到 `10` 次
 
 ```assembly
 # Loop header
@@ -1251,72 +1126,6 @@ R1:
 测试结果：
 
 ```bash
-        ncopy
-0       26
-1       28      28.00
-2       32      16.00
-3       34      11.33
-4       46      11.50
-5       50      10.00
-6       61      10.17
-7       70      10.00
-8       82      10.25
-9       89      9.89
-10      89      8.90
-11      91      8.27
-12      95      7.92
-13      97      7.46
-14      109     7.79
-15      113     7.53
-16      124     7.75
-17      133     7.82
-18      145     8.06
-19      152     8.00
-20      148     7.40
-21      150     7.14
-22      154     7.00
-23      156     6.78
-24      168     7.00
-25      172     6.88
-26      183     7.04
-27      192     7.11
-28      204     7.29
-29      211     7.28
-30      207     6.90
-31      209     6.74
-32      213     6.66
-33      215     6.52
-34      227     6.68
-35      231     6.60
-36      242     6.72
-37      251     6.78
-38      263     6.92
-39      270     6.92
-40      266     6.65
-41      268     6.54
-42      272     6.48
-43      274     6.37
-44      286     6.50
-45      290     6.44
-46      301     6.54
-47      310     6.60
-48      322     6.71
-49      329     6.71
-50      325     6.50
-51      327     6.41
-52      331     6.37
-53      333     6.28
-54      345     6.39
-55      349     6.35
-56      360     6.43
-57      369     6.47
-58      381     6.57
-59      388     6.58
-60      384     6.40
-61      386     6.33
-62      390     6.29
-63      392     6.22
-64      404     6.31
 Average CPE     7.76
 Score   54.9/60.0
 ```
@@ -1587,4 +1396,55 @@ Score   58.1/60.0
 
 这个代码的长度达到了 `999` 个字节，已经是达到极限了
 
-如果需要继续优化的话，可以从控制逻辑上下手
+对应的 `CPE` 也达到了 `7.6` ，距离满分的 `7.5` 只差 `0.1`，如果需要继续优化的话，只能从控制逻辑上下手
+
+去寻找一个更优的控制逻辑，或者尝试去实现对 `pipe-ful.hcl` 进行修改，实现条件传送指令
+
+### 尾声
+
+在我们对 `psim` 执行测试时，有如下输出：
+
+```bash
+$ make SIM=../pipe/psim
+./optest.pl -s ../pipe/psim 
+Simulating with ../pipe/psim
+  All 49 ISA Checks Succeed
+./jtest.pl -s ../pipe/psim 
+Simulating with ../pipe/psim
+Test jf-je-32-64 failed
+Test jf-jge-32-64 failed
+Test jf-jg-32-64 failed
+Test jb-jmp-32-32 failed
+Test jb-jmp-32-64 failed
+Test jb-jmp-64-32 failed
+Test jb-jmp-64-64 failed
+Test jb-jle-32-32 failed
+Test jb-jle-32-64 failed
+Test jb-jle-64-64 failed
+Test jb-jl-32-64 failed
+Test jb-je-32-32 failed
+Test jb-je-64-64 failed
+Test jb-jne-32-64 failed
+Test jb-jne-64-32 failed
+Test jb-jge-32-32 failed
+Test jb-jge-64-32 failed
+Test jb-jge-64-64 failed
+Test jb-jg-64-32 failed
+Test jb-call-32-32 failed
+Test jb-call-32-64 failed
+Test jb-call-64-32 failed
+Test jb-call-64-64 failed
+  23/64 ISA Checks Failed
+./ctest.pl -s ../pipe/psim 
+Simulating with ../pipe/psim
+  All 22 ISA Checks Succeed
+./htest.pl -s ../pipe/psim 
+Simulating with ../pipe/psim
+  All 600 ISA Checks Succeed
+```
+
+但我们最后显示 `600` 条 `ISA` 全部测试成功
+
+在 `Part B` 中我们知道，这里只有 `600` 条指令，全部测试成功表示通过，并且我们在 `ncopy.ys` 中使用 `je, jl, jg` 并没有报错
+
+也就是这三条指令是被正确执行的，这里显示错误我确实十分的疑惑，但我确实不知道为什么，所以只能留在这里了
