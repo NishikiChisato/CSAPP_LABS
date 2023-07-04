@@ -1,6 +1,6 @@
-# arclab
+# archlab
 
-- [arclab](#arclab)
+- [archlab](#archlab)
 	- [准备](#准备)
 	- [环境配置](#环境配置)
 	- [实验开始](#实验开始)
