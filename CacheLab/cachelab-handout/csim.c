@@ -10,7 +10,7 @@ void usage();
 int parse_arg(int argc, char* argv[]);
 void init();
 void calculate();
-void update(int, int);
+void update(int, int, int);
 void free_cache();
 
 typedef struct
@@ -54,20 +54,20 @@ void calculate()
 {
     FILE* fp = fopen(file_input, "r");
     char file_line[20], op;
-    int addr, size;
+    int addr, size, time = 0;
     while(fgets(file_line, 20, fp) != NULL)
     {
         if(file_line[0] == 'I') continue;
         //我们假设内存自动对齐，因此可以忽略size
         sscanf(file_line, " %c %x,%d", &op, &addr, &size);
-        int group = (addr >> b) & (((unsigned)-1) >> (8 * sizeof(unsigned) - s));
+        int group = (addr >> b) & ((1 << s) - 1);
         int tag = addr >> (b + s);
 
         switch(op)
         {
-            case 'M': update(tag, group);
+            case 'M': update(tag, group, ++time);
             case 'L':
-            case 'S': update(tag, group);
+            case 'S': update(tag, group, ++time);
         }
     }
     fclose(fp);
@@ -83,9 +83,8 @@ int get_idx(int tag, int group)
     return -1;
 }
 
-void update(int tag, int group)
+void update(int tag, int group, int time)
 {
-    //printf("begin:  tag == %d  group == %d\n", tag, group);
     //idx表示某一行，即当前地址所对应的行是否存在
     int idx = get_idx(tag, group);
     if(idx == -1)//miss
@@ -106,9 +105,9 @@ void update(int tag, int group)
             int mx = -1;
             for(int i = 0; i < set.E; i ++)
             {
-                if(set.ptr[group][i].timestamp > mx)
+                if(time - set.ptr[group][i].timestamp > mx)
                 {
-                    mx = set.ptr[group][i].timestamp;
+                    mx = time - set.ptr[group][i].timestamp;
                     idx = i;
                 }
             }
@@ -130,13 +129,7 @@ void update(int tag, int group)
         hits++;
         if(verbose) printf("hit\n");
     }
-    for(int i = 0; i < set.E; i ++)
-    {
-        if(set.ptr[group][i].valid)
-            set.ptr[group][i].timestamp++;
-    }
-    //printf("end:  idx == %d  tag == %d  group == %d\n", idx, tag, group);
-    set.ptr[group][idx].timestamp = 0;
+    set.ptr[group][idx].timestamp = time;
     set.ptr[group][idx].tag = tag;
     set.ptr[group][idx].valid = 1;
 }
