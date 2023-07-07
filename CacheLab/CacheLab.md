@@ -596,3 +596,164 @@ TEST_TRANS_RESULTS=1:1700
 ```
 
 可以发现，我们的思路其实是没有说明问题的，我们需要找到一种更大的分块方法并保证发生的碰撞尽可能小
+
+将 $8\times 8$ 的矩阵分成 `4` 个小块，然后分别对每个小块进行处理，得到如下代码：
+
+```c
+char transpose_submit_desc[] = "Transpose submission";
+void transpose_submit(int M, int N, int A[N][M], int B[M][N])
+{
+    for(int i = 0; i < M; i += 8)
+    {
+        for(int j = 0; j < N; j += 8)
+        {
+            //A左上角 - B左上角
+            for(int k = i; k < i + 4; k ++)
+            {
+                int a1 = A[k][j];
+                int a2 = A[k][j + 1];
+                int a3 = A[k][j + 2];
+                int a4 = A[k][j + 3];
+                B[j][k] = a1;
+                B[j + 1][k] = a2;
+                B[j + 2][k] = a3;
+                B[j + 3][k] = a4;
+            }
+            //A左下角 - B右上角
+            for(int k = i; k < i + 4; k ++)
+            {
+                int a1 = A[k + 4][j];
+                int a2 = A[k + 4][j + 1];
+                int a3 = A[k + 4][j + 2];
+                int a4 = A[k + 4][j + 3];
+                B[j][k + 4] = a1;
+                B[j + 1][k + 4] = a2;
+                B[j + 2][k + 4] = a3;
+                B[j + 3][k + 4] = a4;
+            }
+            //A右下角 - B右下角
+            for(int k = i; k < i + 4; k ++)
+            {
+                int a1 = A[k + 4][j + 4];
+                int a2 = A[k + 4][j + 5];
+                int a3 = A[k + 4][j + 6];
+                int a4 = A[k + 4][j + 7];
+                B[j + 4][k + 4] = a1;
+                B[j + 5][k + 4] = a2;
+                B[j + 6][k + 4] = a3;
+                B[j + 7][k + 4] = a4;
+            }
+            //A右上角 - B左下角
+            for(int k = i; k < i + 4; k ++)
+            {
+                int a1 = A[k][j + 4];
+                int a2 = A[k][j + 5];
+                int a3 = A[k][j + 6];
+                int a4 = A[k][j + 7];
+                B[j + 4][k] = a1;
+                B[j + 5][k] = a2;
+                B[j + 6][k] = a3;
+                B[j + 7][k] = a4;                
+            }
+        }
+    }
+}
+```
+
+测试结果：
+
+```bash
+TEST_TRANS_RESULTS=1:1428
+```
+
+我们尽可能让它们之间不要起冲突，具体地，可以只要对应块的映射不重叠，则可以保证冲突的最小值，例如：
+
+* `A` 的左上角可以与 `B` 的右上或右下角（`A` 的左下角同理）
+* `A` 的左上角和右上角可以与 `B` 的左上角和右上角（利用前面的临时变量展开的原理）
+
+交换顺序后的代码如下：
+
+```c
+char transpose_submit_desc[] = "Transpose submission";
+void transpose_submit(int M, int N, int A[N][M], int B[M][N])
+{
+    int a1, a2, a3, a4, a5, a6, a7, a8;
+    for(int i = 0; i < M; i += 8)
+    {
+        for(int j = 0; j < N; j += 8)
+        {
+            //A的左上 -> B的左上
+            //A的右上 -> B的右上
+            for(int k = i; k < i + 4; k ++)
+            {
+                a1 = A[k][j];
+                a2 = A[k][j + 1];
+                a3 = A[k][j + 2];
+                a4 = A[k][j + 3];
+                a5 = A[k][j + 4];
+                a6 = A[k][j + 5];
+                a7 = A[k][j + 6];
+                a8 = A[k][j + 7];
+                B[j][k] = a1;
+                B[j + 1][k] = a2;
+                B[j + 2][k] = a3;
+                B[j + 3][k] = a4;
+                B[j][k + 4] = a5;
+                B[j + 1][k + 4] = a6;
+                B[j + 2][k + 4] = a7;
+                B[j + 3][k + 4] = a8;
+            }
+
+            //B的右上 -> B的左下
+            //A的左下 -> B的右上
+            for(int k = i; k < i + 4; k ++)
+            {
+                //B的右上
+                a5 = B[j][k + 4];
+                a6 = B[j + 1][k + 4];
+                a7 = B[j + 2][k + 4];
+                a8 = B[j + 3][k + 4];
+
+                //A的左下
+                a1 = A[k + 4][j];
+                a2 = A[k + 4][j + 1];
+                a3 = A[k + 4][j + 2];
+                a4 = A[k + 4][j + 3];
+
+                //B的右上
+                B[j][k + 4] = a1;
+                B[j + 1][k + 4] = a2;
+                B[j + 2][k + 4] = a3;
+                B[j + 3][k + 4] = a4;
+
+                //B的左下
+                B[j + 4][k] = a5;
+                B[j + 5][k] = a6;
+                B[j + 6][k] = a7;
+                B[j + 7][k] = a8;
+            }
+            //A的右下 -> B的右下
+            for(int k = i; k < i + 4; k ++)
+            {
+                a1 = A[k + 4][j + 4];
+                a2 = A[k + 4][j + 5];
+                a3 = A[k + 4][j + 6];
+                a4 = A[k + 4][j + 7];    
+                B[j + 4][k + 4] = a1;
+                B[j + 5][k + 4] = a2;
+                B[j + 6][k + 4] = a3;
+                B[j + 7][k + 4] = a4;
+ 
+            }
+        }
+    }
+}
+```
+
+测试结果：
+
+```bash
+TEST_TRANS_RESULTS=1:2684
+```
+
+
