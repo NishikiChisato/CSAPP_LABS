@@ -7,6 +7,7 @@
       - [重要概念](#重要概念)
       - [核心代码](#核心代码)
     - [Part B](#part-b)
+  - [后记](#后记)
 
 
 ## 准备
@@ -507,7 +508,7 @@ TEST_TRANS_RESULTS=1:344
 我们用 `(i, j)` 表示每个分块左上角的坐标，用 `k` 来对分块内部进行枚举，之后枚举八次，因此有：
 
 ```c
-void transpose_submit(int M, int N, int A[N][M], int B[M][N])
+void solve32(int M, int N, int A[N][M], int B[M][N])
 {
     for(int i = 0; i < M; i += 8)
     {
@@ -671,7 +672,11 @@ TEST_TRANS_RESULTS=1:1428
 * `A` 的左上角可以与 `B` 的右上或右下角（`A` 的左下角同理）
 * `A` 的左上角和右上角可以与 `B` 的左上角和右上角（利用前面的临时变量展开的原理）
 
-交换顺序后的代码如下：
+我们将 $8\times 8$ 的矩阵分割成四个 $4\times 4$ 的矩阵，从左上到右下分别用坐标 `(0, 0)` 到 `(1, 1)` 表示
+
+在一开始我们对 $A$ 中矩阵 `(0, 0)` 和 `(0, 1)` 操作时，为了尽可能的利用高速缓存，我们将 $A$ 的一行记录在局部变量中，这一行本应放在 $B$ 的 `(0, 0)` 和 `(1, 0)`，但由于这两块会引起冲突，因此我们将 $A$ 的 `(0, 1)` 放在 $B$ 的 `(0, 1)`，我们之后再将 $B$ 的 `(0, 1)` 移动到 $B$ 的左下角即可
+
+重新排列之后的结果为：
 
 ```c
 char transpose_submit_desc[] = "Transpose submission";
@@ -756,4 +761,174 @@ void transpose_submit(int M, int N, int A[N][M], int B[M][N])
 TEST_TRANS_RESULTS=1:2684
 ```
 
+我们看到速度反而下降了，我们在将 $B$ 的 `(0, 1)` 矩阵移动到 `(1, 0)` 时，采取的是列优先的策略，我们考虑将其改为行优先，这样对于每一次循环，发生 `miss` 的次数将从 `4` 次降为 `1` 次
 
+由于 $B$ 为 $A$ 的转置矩阵，因此对于 $A$ 中坐标 $(i,j)$ 而言，其在 $B$ 中的坐标为 $(j,i)$。换句话说，**如果我们用 $K$ 枚举 $A$ 中的行，那么对于 $B$ 就是在枚举列**
+
+在上面的代码中，由于我们的 $k$ 枚举的是 $A$ 中的行，这会对应于去枚举 $B$ 中的列，换句话说，在我们对 $B$ 的 `(0, 1)` 矩阵进行移动时，**只能做到一列一列移动**
+
+为了将 $B$ 的移动转为一行一行移动，我们需要让 $k$ 枚举 $A$ 中的列。我们写出如下代码：
+
+```c
+void solve64(int M, int N, int A[N][M], int B[M][N])
+{
+    int a1, a2, a3, a4, a5, a6, a7, a8;
+    for(int i = 0; i < M; i += 8)
+    {
+        for(int j = 0; j < N; j += 8)
+        {
+            //A的左上 -> B的左上
+            //A的右上 -> B的右上
+            for(int k = i; k < i + 4; k ++)//k枚举A中的行
+            {
+                a1 = A[k][j];
+                a2 = A[k][j + 1];
+                a3 = A[k][j + 2];
+                a4 = A[k][j + 3];
+                a5 = A[k][j + 4];
+                a6 = A[k][j + 5];
+                a7 = A[k][j + 6];
+                a8 = A[k][j + 7];
+                B[j][k] = a1;
+                B[j + 1][k] = a2;
+                B[j + 2][k] = a3;
+                B[j + 3][k] = a4;
+                B[j][k + 4] = a5;
+                B[j + 1][k + 4] = a6;
+                B[j + 2][k + 4] = a7;
+                B[j + 3][k + 4] = a8;
+            }
+
+            //B的右上 -> B的左下
+            //A的左下 -> B的右上
+            for(int k = j; k < j + 4; k ++)//k枚举A中的列
+            {
+                //若A中枚举坐标为(i, k)，则B中对应的坐标为(k, i)
+                //B的右上
+                a1 = B[k][i + 4];
+                a2 = B[k][i + 5];
+                a3 = B[k][i + 6];
+                a4 = B[k][i + 7];
+                //A的左下
+                a5 = A[i + 4][k];
+                a6 = A[i + 5][k];
+                a7 = A[i + 6][k];
+                a8 = A[i + 7][k];
+                //B的右上
+                B[k][i + 4] = a5;
+                B[k][i + 5] = a6;
+                B[k][i + 6] = a7;
+                B[k][i + 7] = a8;
+                //B的左下
+                B[k + 4][i] = a1;
+                B[k + 4][i + 1] = a2;
+                B[k + 4][i + 2] = a3;
+                B[k + 4][i + 3] = a4;
+
+            }
+            //A的右下 -> B的右下
+            for(int k = i; k < i + 4; k ++)//k枚举A中的行
+            {
+                a1 = A[k + 4][j + 4];
+                a2 = A[k + 4][j + 5];
+                a3 = A[k + 4][j + 6];
+                a4 = A[k + 4][j + 7];    
+                B[j + 4][k + 4] = a1;
+                B[j + 5][k + 4] = a2;
+                B[j + 6][k + 4] = a3;
+                B[j + 7][k + 4] = a4;
+            }
+        }
+    }
+}
+```
+
+测试结果：
+
+```bash
+$ ./test-trans -N 64 -M 64
+
+Function 0 (1 total)
+Step 1: Validating and generating memory traces
+Step 2: Evaluating performance (s=5, E=1, b=5)
+func 0 (Transpose submission): hits:9017, misses:1228, evictions:1196
+
+Summary for official submission (func 0): correctness=1 misses=1228
+
+TEST_TRANS_RESULTS=1:1228
+```
+
+对于第三个 $67\times 61$ 的矩阵，这个矩阵我们无法将其划分为完整的小分块，我们随意的尝试几个数，得出结果即可，这个很难优化
+
+我们将分块的大小设置为 `18`，这个结果是我试出来的，这里的限制很松，很容易过
+
+```c
+void solveMisc(int M, int N, int A[N][M], int B[M][N])
+{
+    for(int i = 0; i < N; i += 18)
+    {
+        for(int j = 0; j < M; j += 18)
+        {
+            for(int n = i; n < i + 18 && n < N; n ++)
+            {
+                for(int m = j; m < j + 18 && m < M; m ++)
+                {
+                    B[m][n] = A[n][m];
+                }
+            }
+        }
+    }
+}
+```
+
+测试结果：
+
+```bash
+$ ./test-trans -N 67 -M 61
+
+Function 0 (1 total)
+Step 1: Validating and generating memory traces
+Step 2: Evaluating performance (s=5, E=1, b=5)
+func 0 (Transpose submission): hits:6217, misses:1962, evictions:1930
+
+Summary for official submission (func 0): correctness=1 misses=1962
+```
+
+全部测试结果如下：
+
+```bash
+$ ./driver.py 
+Part A: Testing cache simulator
+Running ./test-csim
+                        Your simulator     Reference simulator
+Points (s,E,b)    Hits  Misses  Evicts    Hits  Misses  Evicts
+     3 (1,1,1)       9       8       6       9       8       6  traces/yi2.trace
+     3 (4,2,4)       4       5       2       4       5       2  traces/yi.trace
+     3 (2,1,4)       2       3       1       2       3       1  traces/dave.trace
+     3 (2,1,3)     167      71      67     167      71      67  traces/trans.trace
+     3 (2,2,3)     201      37      29     201      37      29  traces/trans.trace
+     3 (2,4,3)     212      26      10     212      26      10  traces/trans.trace
+     3 (5,1,5)     231       7       0     231       7       0  traces/trans.trace
+     6 (5,1,5)  265189   21775   21743  265189   21775   21743  traces/long.trace
+    27
+
+
+Part B: Testing transpose function
+Running ./test-trans -M 32 -N 32
+Running ./test-trans -M 64 -N 64
+Running ./test-trans -M 61 -N 67
+
+Cache Lab summary:
+                        Points   Max pts      Misses
+Csim correctness          27.0        27
+Trans perf 32x32           8.0         8         288
+Trans perf 64x64           8.0         8        1228
+Trans perf 61x67          10.0        10        1962
+          Total points    53.0        53
+```
+
+---
+
+## 后记
+
+这个实验我花了两天的时间，大概肝了 `20+` 个小时。通过这个实验，我这才把 `cache` 的寻址以及碰撞给搞清楚了。我一把书看完就来做这个实验，一开始这些概念真的很模糊，但这个实验神奇的地方就在于它会强迫我去通过做书后面的家庭作业来让我能够有一个更加深入的理解。总的来说，感觉还不错
