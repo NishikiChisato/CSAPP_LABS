@@ -8,7 +8,7 @@
 * [x] *Domb Lab*
 * [x] *Attack Lab*
 * [x] *Architecture Lab*
-* [ ] *Cache Lab*
+* [x] *Cache Lab*
 * [ ] *Performance Lab*
 * [ ] *Shell Lab*
 * [ ] *Malloc Lab*
@@ -23,6 +23,7 @@
 2. 具有理解汇编和反汇编代码的能力，能对过程调用时所进行的操作有清晰的理解，熟悉 CGDB 调试操作
 3. 了解 `CPU` 的运行方式，对 `CPU` 识别指令的过程以及缓冲区溢出攻击有所认识
 4. 加深对 `CPU` 流水线的工作原理的理解，学习了对底层指令进行优化的方法，提高了编码能力
+5. 学习了 `LRU` 在 `cache` 当中的实现，了解了 `cache` 的寻址以及碰撞等工作原理，能够有能力编写出降低 `cache` 碰撞的代码
 
 
 
