@@ -16,6 +16,7 @@
 
 > * *`Architecture Lab（Y86）`* 为 `CSAPP:2e` 的版本
 > * *`Buffer Lab(IA32)`* 为 *`Attack Lab`* 的 `32` 位版本，也属于 `CSAPP:2e`
+> * *`Performance Lab`* 为 *`Cache Lab`* 的弱化版本，由于此实验设计较为粗糙，因此可以只做 *`Cache Lab`*
 
 ## 收获
 
