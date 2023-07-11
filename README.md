@@ -28,14 +28,43 @@
 4. 加深对 `CPU` 流水线的工作原理的理解，学习了对底层指令进行优化的方法，提高了编码能力
 5. 学习了 `LRU` 在 `cache` 当中的实现，了解了 `cache` 的寻址以及碰撞等工作原理，能够有能力编写出降低 `cache` 碰撞的代码
 
+## 文件结构
 
+```
+.
+├── ArchitectureLab
+│   └── archlab-handout
+│       └── sim
+│           ├── misc
+│           │   └── answer
+│           ├── pipe
+│           ├── ptest
+│           ├── seq
+│           └── y86-code
+├── Attacklab
+│   └── target1
+│       └── answer
+│           ├── phase_1
+│           ├── phase_2
+│           ├── phase_3
+│           ├── phase_4
+│           └── phase_5
+├── BombLab
+│   └── bomb
+├── CacheLab
+│   └── cachelab-handout
+│       └── traces
+├── DataLab
+│   └── datalab-handout
+└── Tar
+```
 
 
 ---
 
 ## Bug解决
 
-建议在 `Ubuntu22.04` 平台上运行本项目
+在 `Ubuntu22.04` 平台上运行
 
 如出现：
 
