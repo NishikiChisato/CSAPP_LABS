@@ -1,6 +1,6 @@
-# Datalab
+# datalab
 
-- [Datalab](#datalab)
+- [datalab](#datalab)
   - [准备](#准备)
     - [文件下载](#文件下载)
     - [要求](#要求)
