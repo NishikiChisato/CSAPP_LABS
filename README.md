@@ -12,7 +12,7 @@
   * [ ] *Architecture Lab(Y86)*
 * [x] *Cache Lab*
   * [ ] *Performance Lab*
-* [ ] *Shell Lab*
+* [x] *Shell Lab*
 * [ ] *Malloc Lab*
 * [ ] *Proxy Lab*
 
@@ -27,6 +27,7 @@
 3. 了解 `CPU` 的运行方式，对 `CPU` 识别指令的过程以及缓冲区溢出攻击有所认识
 4. 加深对 `CPU` 流水线的工作原理的理解，学习了对底层指令进行优化的方法，提高了编码能力
 5. 学习了 `LRU` 在 `cache` 当中的实现，了解了 `cache` 的寻址以及碰撞等工作原理，能够有能力编写出降低 `cache` 碰撞的代码
+6. 学习了信号处理函数的使用以及多进程程序避免竞争的办法
 
 ## File structure
 
@@ -56,9 +57,11 @@
 │       └── traces
 ├── DataLab
 │   └── datalab-handout
+├── ShellLab
+│   └── shlab-handout
 └── Tar
-```
 
+```
 
 ---
 

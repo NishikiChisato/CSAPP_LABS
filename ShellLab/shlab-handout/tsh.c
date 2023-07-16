@@ -284,9 +284,7 @@ void eval(char *cmdline)
             sigprocmask(SIG_SETMASK, &prev, NULL);
             waitfg(pid);            
         }
-        //sigprocmask(SIG_SETMASK, &prev, NULL);
     }
-
     return;
 }
 
@@ -365,8 +363,6 @@ int builtin_cmd(char **argv)
         do_bgfg(argv);
         return 1;
     }
-    if(!strcmp(*argv, "&"))
-        return 1;
     return 0;     /* not a builtin command */
 }
 
