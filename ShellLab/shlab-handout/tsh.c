@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/stat.h>
 #include <errno.h>
 
 /* Misc manifest constants */
@@ -84,6 +85,84 @@ void unix_error(char *msg);
 void app_error(char *msg);
 typedef void handler_t(int);
 handler_t *Signal(int signum, handler_t *handler);
+
+//function wrappers
+pid_t Fork(void);
+void Execve(const char *filename, char *const argv[], char *const envp[]);
+pid_t Wait(int *status);
+pid_t Waitpid(pid_t pid, int *iptr, int options);
+void Kill(pid_t pid, int signum);
+unsigned int Sleep(unsigned int secs);
+void Pause(void);
+unsigned int Alarm(unsigned int seconds);
+void Setpgid(pid_t pid, pid_t pgid);
+pid_t Getpgrp();
+
+pid_t Fork(void)
+{
+    pid_t pid;
+    if((pid = fork()) < 0)
+        unix_error("Fork error");
+    return pid;
+}
+
+void Execve(const char *filename, char *const argv[], char *const envp[])
+{
+    if(execve(filename, argv, envp) < 0)
+        unix_error("Execve error");
+}
+
+pid_t Wait(int *status)
+{
+    pid_t pid;
+    if((pid = wait(status)) < 0)
+        unix_error("Wait error");
+    return pid;
+}
+
+pid_t Waitpid(pid_t pid, int *iptr, int options)
+{
+    pid_t rpid;
+    if((rpid = waitpid(pid, iptr, options)) < 0)
+        unix_error("Waitpid error");
+    return rpid;
+}
+
+void Kill(pid_t pid, int signum)
+{
+    if(kill(pid, signum) < 0)
+        unix_error("Kill error");
+}
+
+unsigned int Sleep(unsigned int secs)
+{
+    int ret;
+    if((ret = sleep(secs)) < 0)
+        unix_error("Sleep error");
+    return ret;
+}
+
+void Pause(void)
+{
+    pause();
+    return;
+}
+
+unsigned int Alarm(unsigned int seconds)
+{
+    return alarm(seconds);
+}
+
+void Setpgid(pid_t pid, pid_t pgid)
+{
+    if(setpgid(pid, pgid) < 0)
+        unix_error("Setgpid error");
+}
+
+pid_t Getpgrp()
+{
+    return getpgrp();
+}
 
 /*
  * main - The shell's main routine 
@@ -165,6 +244,14 @@ int main(int argc, char **argv)
 */
 void eval(char *cmdline) 
 {
+    char buf[MAXLINE], *argv[MAXARGS];//buf存放输入的命令行，argv存放具体指令的参数，格式与main中的argv一样
+    strcpy(buf, cmdline);
+    int background = parseline(buf, argv);
+    if(!builtin_cmd(argv))//非内置指令
+    {
+
+    }
+
     return;
 }
 
@@ -231,6 +318,18 @@ int parseline(const char *cmdline, char **argv)
  */
 int builtin_cmd(char **argv) 
 {
+    if(!strcmp(*argv, "quit")) 
+        exit(0);
+    else if(!strcmp(*argv, "jobs"))
+        listjobs(jobs);
+    else if(!strcmp(*argv, "bg"))
+    {   
+
+    }
+    else if(!strcmp(*argv, "fg"))
+    {
+
+    }
     return 0;     /* not a builtin command */
 }
 
