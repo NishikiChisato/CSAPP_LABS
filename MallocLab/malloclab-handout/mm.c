@@ -74,21 +74,22 @@ team_t team = {
 #define NEXT_BLKP(bp)   ((char*)(bp) + GET_SIZE(((char*)(bp) - WSIZE)))
 #define PREV_BLKP(bp)   ((char*)(bp) - GET_SIZE(((char*)(bp) - DSIZE)))
 
-#define GET_PRED(bp)    ((unsigned int*)(GET(bp)))
-#define GET_SUCC(bp)    ((unsigned int*)(GET(bp + WSIZE)))
+#define GET_PRED(bp)    ((unsigned int*)(bp))
+#define GET_SUCC(bp)    ((unsigned int*)(bp + WSIZE))
 
 #define GET_FREE_LIST(num)  (free_list + WSIZE + (num * WSIZE))
 
 //the size of size class
 #define CLASS_SIZE  20
 //free list entries' size
+//min val is 3
 #define ENTRY_SIZE  5
 
 static char* free_list;
 
 static void* extend_heap(size_t words);
-static void* coalesce(void* bp);
-static void* find_fit(void* base_ptr, size_t size);
+//static void* coalesce(void* bp);
+//static void* find_fit(void* base_ptr, size_t size);
 static void place(void* bp, size_t asize);
 
 /* 
@@ -112,7 +113,7 @@ int mm_init(void)
 
     //PUT(free_list + WSIZE + CLASS_SIZE * WSIZE, PACK(0, 1));
 
-    PUT(GET_FREE_LIST(CHUNKSIZE), PACK(0, 1));
+    PUT(GET_FREE_LIST(CLASS_SIZE), PACK(0, 1));
 
     //if(extend_heap(CHUNKSIZE / WSIZE) == NULL)
     //    return -1;
@@ -137,11 +138,10 @@ static void* extend_heap(size_t words)
 //bp point to free block
 static int find_idx(size_t size)
 {
-    int idx = 0;
     for(int i = 3; i <= 31; i ++)
         if(size <= (1 << i))
-            idx = i;
-    return idx;
+            return i;
+    return -1;
 }
 
 //insert a free block in head
@@ -165,34 +165,46 @@ static int find_idx(size_t size)
 // }
 
 //two free block can be coalesced if and only if they are adjacent
-static void* coalesce(void* bp)
+// static void* coalesce(void* bp)
+// {
+//     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+//     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+//     size_t size = GET_SIZE(HDRP(bp));
+//     if(prev_alloc && next_alloc)
+//         return bp;
+//     else if(prev_alloc && !next_alloc)
+//     {
+//         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+//         PUT(HDRP(bp), PACK(size, 0));
+//         PUT(FTRP(bp), PACK(size, 0));
+//     }
+//     else if(!prev_alloc && next_alloc)
+//     {
+//         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+//         PUT(FTRP(bp), PACK(size, 0));
+//         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+//         bp = PREV_BLKP(bp);
+//     }
+//     else
+//     {
+//         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+//         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+//         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));   
+//         bp = PREV_BLKP(bp);
+//     }
+//     return bp;
+// }
+
+size_t roundUp2Pow(size_t num)
 {
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    size_t size = GET_SIZE(HDRP(bp));
-    if(prev_alloc && next_alloc)
-        return bp;
-    else if(prev_alloc && !next_alloc)
-    {
-        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-        PUT(HDRP(bp), PACK(size, 0));
-        PUT(FTRP(bp), PACK(size, 0));
-    }
-    else if(!prev_alloc && next_alloc)
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-        PUT(FTRP(bp), PACK(size, 0));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        bp = PREV_BLKP(bp);
-    }
-    else
-    {
-        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));   
-        bp = PREV_BLKP(bp);
-    }
-    return bp;
+    num--;
+    num |= num >> 1;
+    num |= num >> 2;
+    num |= num >> 4;
+    num |= num >> 8;
+    num |= num >> 16;
+    num++;
+    return num;
 }
 
 /* 
@@ -201,38 +213,72 @@ static void* coalesce(void* bp)
  */
 void *mm_malloc(size_t size)
 {
-    size_t asize, extendsize;
+    size_t asize;
     char* bp;
     if(size == 0)
         return NULL;
     if(size <= DSIZE)
         asize = 2 * DSIZE;
-    else asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
-
-    int idx = find_idx(size);
-    void* basePtr = GET_FREE_LIST(idx);
-    if((void*)GET(basePtr) == NULL)
+    else 
     {
-        bp = extend_heap(((1 << idx) + 8) * 20 / WSIZE);
+        //asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
+        asize = roundUp2Pow(size);
+    }
 
-        PUT(HDRP(bp), PACK(asize, 1));
-        PUT(FTRP(bp), PACK(asize, 1));
+    int idx = find_idx(asize);
+    void* basePtr = GET_FREE_LIST(idx);
+    if((void*)GET(basePtr) == NULL || GET_SIZE(HDRP(GET(basePtr))) == 0)
+    {
+        bp = extend_heap((asize + 8) * ENTRY_SIZE / WSIZE);
+        if(bp == NULL) return NULL;
+
+        char* cur = bp;
+        size_t csize = asize * ENTRY_SIZE;
+        while(csize >= asize)
+        {
+            PUT(HDRP(cur), PACK(asize, 0));
+            PUT(FTRP(cur), PACK(asize, 0));
+            cur = NEXT_BLKP(cur);
+            PUT(HDRP(cur), PACK(csize - asize, 0));
+            PUT(FTRP(cur), PACK(csize - asize, 0));
+            csize -= asize;
+        }
 
         PUT(basePtr, NEXT_BLKP(bp));
         PUT(GET_PRED(NEXT_BLKP(bp)), NULL);
         PUT(GET_SUCC(NEXT_BLKP(bp)), NEXT_BLKP(NEXT_BLKP(bp)));
-        for(void* cur = NEXT_BLKP(GET(basePtr)); GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
+
+        for(char* ptr = NEXT_BLKP(bp); GET_SIZE(HDRP(ptr)) > 0; ptr = NEXT_BLKP(ptr))
         {
-            PUT(GET_PRED(cur), PREV_BLKP(cur));
-            PUT(GET_SUCC(cur), NEXT_BLKP(cur));
-        } 
+            PUT(GET_PRED(ptr), PREV_BLKP(ptr));
+            PUT(GET_SUCC(ptr), NEXT_BLKP(ptr));
+        }
+
         return bp;
     }
     else
     {
-        bp = GET(GET_FREE_LIST(idx));
-        PUT(GET_FREE_LIST(idx), NEXT_BLKP(bp));
+        bp = (char*)GET(GET_FREE_LIST(idx));
+        PUT(basePtr, NEXT_BLKP(bp));
         return bp;
+    }
+}
+
+static void place(void* bp, size_t asize)
+{
+    size_t csize = GET_SIZE(HDRP(bp));
+    if((csize - asize) >= (2 * DSIZE))
+    {
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(csize - asize, 0));
+        PUT(FTRP(bp), PACK(csize - asize, 0));
+    }
+    else
+    {
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
     }
 }
 
@@ -245,13 +291,24 @@ void mm_free(void *ptr)
     // PUT(HDRP(ptr), PACK(size, 0));
     // PUT(FTRP(ptr), PACK(size, 0));
     // coalesce(ptr);
-    size_t size = GET_SIZE(ptr);
+    size_t size = GET_SIZE(HDRP(ptr));
     int idx = 0;
     idx = find_idx(size);
     void* bp = GET_FREE_LIST(idx);
-    PUT(GET_PRED(ptr), NULL);
-    PUT(GET_SUCC(ptr), GET(bp));
-    PUT(bp, ptr);
+    if(GET_SIZE(HDRP(GET(bp))) == 0)
+    {
+        PUT(GET_PRED(ptr), NULL);
+        PUT(GET_SUCC(ptr), GET(bp));
+        PUT(bp, ptr);
+    }
+    else
+    {
+        char* nxt = (char*)GET(bp);
+        PUT(GET_PRED(ptr), NULL);
+        PUT(GET_SUCC(ptr), nxt);
+        PUT(GET_PRED(nxt), ptr);
+        PUT(bp, ptr);
+    }
 }
 
 /*
