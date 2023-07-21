@@ -74,6 +74,11 @@ team_t team = {
 #define NEXT_BLKP(bp)   ((char*)(bp) + GET_SIZE(((char*)(bp) - WSIZE)))
 #define PREV_BLKP(bp)   ((char*)(bp) - GET_SIZE(((char*)(bp) - DSIZE)))
 
+#define GET_PRED(bp)    ((unsigned int*)(GET(bp)))
+#define GET_SUCC(bp)    ((unsigned int*)(GET(bp + WSIZE)))
+
+#define GET_FREE_LIST(num)  (free_list + WSIZE + (num * WSIZE))
+
 //the size of size class
 #define CLASS_SIZE  20
 //free list entries' size
@@ -85,8 +90,6 @@ static void* extend_heap(size_t words);
 static void* coalesce(void* bp);
 static void* find_fit(void* base_ptr, size_t size);
 static void place(void* bp, size_t asize);
-static void* find_idx(size_t asize);
-static int lowbit(int x);
 
 /* 
  * mm_init - initialize the malloc package.
@@ -99,16 +102,20 @@ int mm_init(void)
     PUT(free_list, 0);
     PUT(free_list + 1 * WSIZE, PACK(DSIZE, 1));
     PUT(free_list + 2 * WSIZE, PACK(DSIZE, 1));
-    PUT(free_list + 3 * WSIZE, PACK(0, 1));
+    //PUT(free_list + 3 * WSIZE, PACK(0, 1));
 
     free_list += (2 * WSIZE);
     //free block divided by powers of 2, min size of free block is 16 bytes
     //[16], [17, 32], [33, 64], ...
     for(int i = 0; i < CLASS_SIZE; i ++)
-        PUT(free_list + DSIZE + i * WSIZE, 0);
+        PUT(GET_FREE_LIST(i), NULL);
 
-    if(extend_heap(CHUNKSIZE / WSIZE) == NULL)
-        return -1;
+    //PUT(free_list + WSIZE + CLASS_SIZE * WSIZE, PACK(0, 1));
+
+    PUT(GET_FREE_LIST(CHUNKSIZE), PACK(0, 1));
+
+    //if(extend_heap(CHUNKSIZE / WSIZE) == NULL)
+    //    return -1;
     return 0;
 }
 
@@ -124,9 +131,41 @@ static void* extend_heap(size_t words)
     PUT(FTRP(bp), PACK(size, 0));
     //epilogue header
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
-    return coalesce(bp);
+    return bp;
 }
 
+//bp point to free block
+static int find_idx(void* bp)
+{
+    size_t size = GET_SIZE(bp);
+    int idx = 0;
+    for(int i = 3; i <= 31; i ++)
+        if(size <= (1 << i))
+            idx = i;
+    return idx;
+}
+
+//insert a free block in head
+static void insert(void* bp)
+{
+    size_t size = GET_SIZE(bp);
+    int idx = find_idx(size);
+    if(GET(GET_FREE_LIST(idx)) == NULL)
+    {
+        PUT(GET_FREE_LIST(idx), bp);
+        PUT(GET_PRED(bp), NULL);
+        PUT(GET_SUCC(bp), NULL);
+    }
+    else
+    {
+        void* entryAddr = GET(GET_FREE_LIST(idx));
+        PUT(GET_SUCC(bp), entryAddr);
+        PUT(GET_PRED(entryAddr), bp);
+        PUT(GET_PRED(bp), NULL);
+    }
+}
+
+//two free block can be coalesced if and only if they are adjacent
 static void* coalesce(void* bp)
 {
     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
@@ -171,49 +210,35 @@ void *mm_malloc(size_t size)
         asize = 2 * DSIZE;
     else asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
 
-    bp = find_idx(asize);
+    int idx = find_idx(size);
 
-    if(*bp == 0)
+    if(GET(GET_FREE_LIST(idx)) == NULL)
     {
-        if((bp = mem_sbrk(WSIZE * 4)) == (void*)-1)
-            return NULL;
-        PUT(bp, PACK(8, 1));
-        PUT(bp + WSIZE, PACK(8, 1));
-        PUT(bp + 2 * WSIZE, PACK(0, 1));
-        bp += (2 * WSIZE);
-        bp = extend_heap(MAX(asize, CHUNKSIZE));        
+        bp = extend_heap(((1 << idx) + 8) * 20 / WSIZE);
+
+
+        
     }
 
-    if((bp = find_fit(bp, asize)) != NULL)
+
+
+
+    /*
+    if((bp = find_fit(*bp, asize)) != NULL)
     {
         place(bp, asize);
         return bp;
     }
-    extendsize = MAX(asize, CHUNKSIZE);
     if((bp = extend_heap(extendsize / WSIZE)) == NULL)
         return NULL;
     place(bp, asize);
+    */
     return bp;
 }
 
 static int lowbit(int x)
 {
     return x & -x;
-}
-
-static void* find_idx(size_t asize)
-{
-    size_t bit = 0, max_bit = 0, idx = 0;
-    while(asize)
-    {
-        bit = lowbit(asize);
-        max_bit = MAX(max_bit, bit);
-        asize -= bit;
-    }
-    max_bit <<= 1;
-    for(size_t i = 1; i <= max_bit; i <<= 1)
-        idx++;
-    return free_list + DSIZE + idx;
 }
 
 //size >= 2 * DSIZE
