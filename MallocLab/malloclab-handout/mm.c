@@ -135,9 +135,8 @@ static void* extend_heap(size_t words)
 }
 
 //bp point to free block
-static int find_idx(void* bp)
+static int find_idx(size_t size)
 {
-    size_t size = GET_SIZE(bp);
     int idx = 0;
     for(int i = 3; i <= 31; i ++)
         if(size <= (1 << i))
@@ -146,24 +145,24 @@ static int find_idx(void* bp)
 }
 
 //insert a free block in head
-static void insert(void* bp)
-{
-    size_t size = GET_SIZE(bp);
-    int idx = find_idx(size);
-    if(GET(GET_FREE_LIST(idx)) == NULL)
-    {
-        PUT(GET_FREE_LIST(idx), bp);
-        PUT(GET_PRED(bp), NULL);
-        PUT(GET_SUCC(bp), NULL);
-    }
-    else
-    {
-        void* entryAddr = GET(GET_FREE_LIST(idx));
-        PUT(GET_SUCC(bp), entryAddr);
-        PUT(GET_PRED(entryAddr), bp);
-        PUT(GET_PRED(bp), NULL);
-    }
-}
+// static void insert(void* bp)
+// {
+//     size_t size = GET_SIZE(bp);
+//     int idx = find_idx(size);
+//     if(GET(GET_FREE_LIST(idx)) == NULL)
+//     {
+//         PUT(GET_FREE_LIST(idx), bp);
+//         PUT(GET_PRED(bp), NULL);
+//         PUT(GET_SUCC(bp), NULL);
+//     }
+//     else
+//     {
+//         void* entryAddr = GET(GET_FREE_LIST(idx));
+//         PUT(GET_SUCC(bp), entryAddr);
+//         PUT(GET_PRED(entryAddr), bp);
+//         PUT(GET_PRED(bp), NULL);
+//     }
+// }
 
 //two free block can be coalesced if and only if they are adjacent
 static void* coalesce(void* bp)
@@ -211,61 +210,29 @@ void *mm_malloc(size_t size)
     else asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
 
     int idx = find_idx(size);
-
-    if(GET(GET_FREE_LIST(idx)) == NULL)
+    void* basePtr = GET_FREE_LIST(idx);
+    if((void*)GET(basePtr) == NULL)
     {
         bp = extend_heap(((1 << idx) + 8) * 20 / WSIZE);
 
-
-        
-    }
-
-
-
-
-    /*
-    if((bp = find_fit(*bp, asize)) != NULL)
-    {
-        place(bp, asize);
-        return bp;
-    }
-    if((bp = extend_heap(extendsize / WSIZE)) == NULL)
-        return NULL;
-    place(bp, asize);
-    */
-    return bp;
-}
-
-static int lowbit(int x)
-{
-    return x & -x;
-}
-
-//size >= 2 * DSIZE
-static void* find_fit(void* base_ptr, size_t asize)
-{
-    void* bp;
-    for(bp = base_ptr; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
-        if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-            return bp;
-    return NULL;
-}
-
-static void place(void* bp, size_t asize)
-{
-    size_t csize = GET_SIZE(HDRP(bp));
-    if((csize - asize) >= (2 * DSIZE))
-    {
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
-        bp = NEXT_BLKP(bp);
-        PUT(HDRP(bp), PACK(csize - asize, 0));
-        PUT(FTRP(bp), PACK(csize - asize, 0));
+
+        PUT(basePtr, NEXT_BLKP(bp));
+        PUT(GET_PRED(NEXT_BLKP(bp)), NULL);
+        PUT(GET_SUCC(NEXT_BLKP(bp)), NEXT_BLKP(NEXT_BLKP(bp)));
+        for(void* cur = NEXT_BLKP(GET(basePtr)); GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
+        {
+            PUT(GET_PRED(cur), PREV_BLKP(cur));
+            PUT(GET_SUCC(cur), NEXT_BLKP(cur));
+        } 
+        return bp;
     }
     else
     {
-        PUT(HDRP(bp), PACK(csize, 1));
-        PUT(FTRP(bp), PACK(csize, 1));
+        bp = GET(GET_FREE_LIST(idx));
+        PUT(GET_FREE_LIST(idx), NEXT_BLKP(bp));
+        return bp;
     }
 }
 
@@ -274,10 +241,17 @@ static void place(void* bp, size_t asize)
  */
 void mm_free(void *ptr)
 {
-    size_t size = GET_SIZE(HDRP(ptr));
-    PUT(HDRP(ptr), PACK(size, 0));
-    PUT(FTRP(ptr), PACK(size, 0));
-    coalesce(ptr);
+    // size_t size = GET_SIZE(HDRP(ptr));
+    // PUT(HDRP(ptr), PACK(size, 0));
+    // PUT(FTRP(ptr), PACK(size, 0));
+    // coalesce(ptr);
+    size_t size = GET_SIZE(ptr);
+    int idx = 0;
+    idx = find_idx(size);
+    void* bp = GET_FREE_LIST(idx);
+    PUT(GET_PRED(ptr), NULL);
+    PUT(GET_SUCC(ptr), GET(bp));
+    PUT(bp, ptr);
 }
 
 /*
