@@ -13,9 +13,6 @@ OBJS = mdriver.o mm.o memlib.o fsecs.o fcyc.o clock.o ftimer.o
 mdriver: $(OBJS)
 	$(CC) $(CFLAGS) -o mdriver $(OBJS)
 
-debug:
-	$(CC) $(CFLAGS) -o debug $(OBJS)
-
 mdriver.o: mdriver.c fsecs.h fcyc.h clock.h memlib.h config.h mm.h
 memlib.o: memlib.c memlib.h
 mm.o: mm.c mm.h memlib.h

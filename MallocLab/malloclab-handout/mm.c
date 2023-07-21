@@ -83,15 +83,17 @@ static char* free_list;
 
 static void* extend_heap(size_t words);
 static void* coalesce(void* bp);
-static void* find_fit(size_t size);
+static void* find_fit(void* base_ptr, size_t size);
 static void place(void* bp, size_t asize);
+static void* find_idx(size_t asize);
+static int lowbit(int x);
 
 /* 
  * mm_init - initialize the malloc package.
  */
 int mm_init(void)
 {
-    if((free_list = mem_sbrk(WSIZE * 4)) == (void*)-1)
+    if((free_list = mem_sbrk(WSIZE * (4 + CLASS_SIZE))) == (void*)-1)
         return -1;
     
     PUT(free_list, 0);
@@ -100,6 +102,10 @@ int mm_init(void)
     PUT(free_list + 3 * WSIZE, PACK(0, 1));
 
     free_list += (2 * WSIZE);
+    //free block divided by powers of 2, min size of free block is 16 bytes
+    //[16], [17, 32], [33, 64], ...
+    for(int i = 0; i < CLASS_SIZE; i ++)
+        PUT(free_list + DSIZE + i * WSIZE, 0);
 
     if(extend_heap(CHUNKSIZE / WSIZE) == NULL)
         return -1;
@@ -113,8 +119,10 @@ static void* extend_heap(size_t words)
     size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
     if((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
+    //free block header and footer
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
+    //epilogue header
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
     return coalesce(bp);
 }
@@ -163,7 +171,20 @@ void *mm_malloc(size_t size)
         asize = 2 * DSIZE;
     else asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
 
-    if((bp = find_fit(asize)) != NULL)
+    bp = find_idx(asize);
+
+    if(*bp == 0)
+    {
+        if((bp = mem_sbrk(WSIZE * 4)) == (void*)-1)
+            return NULL;
+        PUT(bp, PACK(8, 1));
+        PUT(bp + WSIZE, PACK(8, 1));
+        PUT(bp + 2 * WSIZE, PACK(0, 1));
+        bp += (2 * WSIZE);
+        bp = extend_heap(MAX(asize, CHUNKSIZE));        
+    }
+
+    if((bp = find_fit(bp, asize)) != NULL)
     {
         place(bp, asize);
         return bp;
@@ -175,16 +196,31 @@ void *mm_malloc(size_t size)
     return bp;
 }
 
-int lowbit(int x)
+static int lowbit(int x)
 {
     return x & -x;
 }
 
+static void* find_idx(size_t asize)
+{
+    size_t bit = 0, max_bit = 0, idx = 0;
+    while(asize)
+    {
+        bit = lowbit(asize);
+        max_bit = MAX(max_bit, bit);
+        asize -= bit;
+    }
+    max_bit <<= 1;
+    for(size_t i = 1; i <= max_bit; i <<= 1)
+        idx++;
+    return free_list + DSIZE + idx;
+}
+
 //size >= 2 * DSIZE
-static void* find_fit(size_t asize)
+static void* find_fit(void* base_ptr, size_t asize)
 {
     void* bp;
-    for(bp = free_list; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    for(bp = base_ptr; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
         if(!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
             return bp;
     return NULL;
