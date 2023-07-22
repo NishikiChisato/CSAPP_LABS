@@ -83,7 +83,7 @@ team_t team = {
 #define CLASS_SIZE  20
 //free list entries' size
 //min val is 3
-#define ENTRY_SIZE  5
+#define ENTRY_SIZE  3
 
 static char* free_list;
 
@@ -91,6 +91,33 @@ static void* extend_heap(size_t words);
 //static void* coalesce(void* bp);
 //static void* find_fit(void* base_ptr, size_t size);
 static void place(void* bp, size_t asize);
+
+void FreeBlock(void* bp)
+{
+    int i = 0;
+    for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
+    {
+        printf("i = %d, begin: %p, end: %p\n",i++ , cur, FTRP(cur));
+    }
+}
+
+void BlockPtr(void* bp)
+{
+    int i = 0;
+    for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
+    {
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p\n",i++ , cur, FTRP(cur), GET(GET_PRED(cur)), GET(GET_SUCC(cur)));
+    }
+}
+
+void Linklist(void* bp)
+{
+    int i = 0;
+    for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = GET_SUCC(cur))
+    {
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p\n",i++ , cur, FTRP(cur), GET(GET_PRED(cur)), GET(GET_SUCC(cur)));
+    }
+}
 
 /* 
  * mm_init - initialize the malloc package.
@@ -222,6 +249,8 @@ void *mm_malloc(size_t size)
     else 
     {
         //asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
+        //size = MAX(size, (2 * DSIZE));
+        size += DSIZE;
         asize = roundUp2Pow(size);
     }
 
@@ -248,7 +277,7 @@ void *mm_malloc(size_t size)
         PUT(GET_PRED(NEXT_BLKP(bp)), NULL);
         PUT(GET_SUCC(NEXT_BLKP(bp)), NEXT_BLKP(NEXT_BLKP(bp)));
 
-        for(char* ptr = NEXT_BLKP(bp); GET_SIZE(HDRP(ptr)) > 0; ptr = NEXT_BLKP(ptr))
+        for(char* ptr = NEXT_BLKP(NEXT_BLKP(bp)); GET_SIZE(HDRP(ptr)) > 0; ptr = NEXT_BLKP(ptr))
         {
             PUT(GET_PRED(ptr), PREV_BLKP(ptr));
             PUT(GET_SUCC(ptr), NEXT_BLKP(ptr));
@@ -259,9 +288,12 @@ void *mm_malloc(size_t size)
     else
     {
         bp = (char*)GET(GET_FREE_LIST(idx));
-        PUT(basePtr, NEXT_BLKP(bp));
+        //PUT(basePtr, NEXT_BLKP(bp));
+        PUT(basePtr, GET(GET_SUCC(bp)));
+        PUT(GET_PRED(NEXT_BLKP(bp)), NULL);
         return bp;
     }
+    return NULL;
 }
 
 static void place(void* bp, size_t asize)
@@ -292,14 +324,16 @@ void mm_free(void *ptr)
     // PUT(FTRP(ptr), PACK(size, 0));
     // coalesce(ptr);
     size_t size = GET_SIZE(HDRP(ptr));
+    size = roundUp2Pow(size);
     int idx = 0;
     idx = find_idx(size);
     void* bp = GET_FREE_LIST(idx);
-    if(GET_SIZE(HDRP(GET(bp))) == 0)
+    //if(GET_SIZE(HDRP(GET(bp))) == 0 && GET_ALLOC(HDRP(GET(bp))))
+    if((void*)GET(bp) == NULL || GET_SIZE(HDRP(GET(bp))) == 0)
     {
         PUT(GET_PRED(ptr), NULL);
         PUT(GET_SUCC(ptr), GET(bp));
-        PUT(bp, ptr);
+        PUT(bp, (char*)ptr);
     }
     else
     {
@@ -307,21 +341,32 @@ void mm_free(void *ptr)
         PUT(GET_PRED(ptr), NULL);
         PUT(GET_SUCC(ptr), nxt);
         PUT(GET_PRED(nxt), ptr);
-        PUT(bp, ptr);
+        PUT(bp, (char*)ptr);
     }
 }
 
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
-void *mm_realloc(void *ptr, size_t size)
+void *mm_realloc(void *ptr, size_t new_size)
 {
-    size_t old_size = GET_SIZE(HDRP(ptr));
-    if(size < old_size) old_size = size;
-    void* new_ptr;
-    if((new_ptr = mm_malloc(size)) == NULL)
+    // size_t old_size = (GET_SIZE(HDRP(ptr)) - DSIZE);
+    // if(new_size < old_size) old_size = new_size;
+    // void* new_ptr;
+    // if((new_ptr = mm_malloc(new_size)) == NULL)
+    //     return NULL;
+    // memcpy(new_ptr, ptr, old_size);
+    // mm_free(ptr);
+    // return new_ptr;
+
+    size_t copy_size = (GET_SIZE(HDRP(ptr)) - DSIZE);
+    if(new_size == copy_size) 
+        return ptr;
+    char* new_ptr;
+    if((new_ptr = mm_malloc(new_size)) == NULL)
         return NULL;
-    memcpy(new_ptr, ptr, old_size);
+    if(new_size < copy_size) copy_size = new_size;
+    memcpy(new_ptr, ptr, copy_size);
     mm_free(ptr);
     return new_ptr;
 }
