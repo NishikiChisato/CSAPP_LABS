@@ -80,7 +80,7 @@ team_t team = {
 #define GET_FREE_LIST(num)  (free_list + WSIZE + (num * WSIZE))
 
 //the size of size class
-#define CLASS_SIZE  20
+#define CLASS_SIZE  30
 //free list entries' size
 //min val is 3
 #define ENTRY_SIZE  3
@@ -88,9 +88,13 @@ team_t team = {
 static char* free_list;
 
 static void* extend_heap(size_t words);
-//static void* coalesce(void* bp);
+static void* coalesce(void* bp);
 //static void* find_fit(void* base_ptr, size_t size);
 static void place(void* bp, size_t asize);
+void *advanced_malloc(size_t size);
+void advanced_free(void *ptr);
+void *advanced_realloc(void *ptr, size_t new_size);
+
 
 void FreeBlock(void* bp)
 {
@@ -106,7 +110,8 @@ void BlockPtr(void* bp)
     int i = 0;
     for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
     {
-        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p\n",i++ , cur, FTRP(cur), GET(GET_PRED(cur)), GET(GET_SUCC(cur)));
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d\n",i++ , cur, FTRP(cur), 
+        GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)));
     }
 }
 
@@ -115,7 +120,8 @@ void Linklist(void* bp)
     int i = 0;
     for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = GET_SUCC(cur))
     {
-        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p\n",i++ , cur, FTRP(cur), GET(GET_PRED(cur)), GET(GET_SUCC(cur)));
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d\n",i++ , cur, FTRP(cur),
+         GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)));
     }
 }
 
@@ -124,6 +130,7 @@ void Linklist(void* bp)
  */
 int mm_init(void)
 {
+    //advanced free list
     if((free_list = mem_sbrk(WSIZE * (4 + CLASS_SIZE))) == (void*)-1)
         return -1;
     
@@ -141,6 +148,10 @@ int mm_init(void)
     //PUT(free_list + WSIZE + CLASS_SIZE * WSIZE, PACK(0, 1));
 
     PUT(GET_FREE_LIST(CLASS_SIZE), PACK(0, 1));
+
+
+    //default free list
+
 
     //if(extend_heap(CHUNKSIZE / WSIZE) == NULL)
     //    return -1;
@@ -167,7 +178,7 @@ static int find_idx(size_t size)
 {
     for(int i = 3; i <= 31; i ++)
         if(size <= (1 << i))
-            return i;
+            return i - 3;
     return -1;
 }
 
@@ -192,35 +203,35 @@ static int find_idx(size_t size)
 // }
 
 //two free block can be coalesced if and only if they are adjacent
-// static void* coalesce(void* bp)
-// {
-//     size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-//     size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-//     size_t size = GET_SIZE(HDRP(bp));
-//     if(prev_alloc && next_alloc)
-//         return bp;
-//     else if(prev_alloc && !next_alloc)
-//     {
-//         size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-//         PUT(HDRP(bp), PACK(size, 0));
-//         PUT(FTRP(bp), PACK(size, 0));
-//     }
-//     else if(!prev_alloc && next_alloc)
-//     {
-//         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-//         PUT(FTRP(bp), PACK(size, 0));
-//         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-//         bp = PREV_BLKP(bp);
-//     }
-//     else
-//     {
-//         size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
-//         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-//         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));   
-//         bp = PREV_BLKP(bp);
-//     }
-//     return bp;
-// }
+static void* coalesce(void* bp)
+{
+    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t size = GET_SIZE(HDRP(bp));
+    if(prev_alloc && next_alloc)
+        return bp;
+    else if(prev_alloc && !next_alloc)
+    {
+        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+        PUT(HDRP(bp), PACK(size, 0));
+        PUT(FTRP(bp), PACK(size, 0));
+    }
+    else if(!prev_alloc && next_alloc)
+    {
+        size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+        PUT(FTRP(bp), PACK(size, 0));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        bp = PREV_BLKP(bp);
+    }
+    else
+    {
+        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+        PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));   
+        bp = PREV_BLKP(bp);
+    }
+    return bp;
+}
 
 size_t roundUp2Pow(size_t num)
 {
@@ -238,7 +249,13 @@ size_t roundUp2Pow(size_t num)
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
+
 void *mm_malloc(size_t size)
+{
+    return advanced_malloc(size);
+}
+
+void *advanced_malloc(size_t size)
 {
     size_t asize;
     char* bp;
@@ -252,6 +269,7 @@ void *mm_malloc(size_t size)
         //size = MAX(size, (2 * DSIZE));
         size += DSIZE;
         asize = roundUp2Pow(size);
+        //asize = DSIZE * ((size + DSIZE + (DSIZE - 1)) / DSIZE);
     }
 
     int idx = find_idx(asize);
@@ -293,7 +311,6 @@ void *mm_malloc(size_t size)
         PUT(GET_PRED(NEXT_BLKP(bp)), NULL);
         return bp;
     }
-    return NULL;
 }
 
 static void place(void* bp, size_t asize)
@@ -317,7 +334,13 @@ static void place(void* bp, size_t asize)
 /*
  * mm_free - Freeing a block does nothing.
  */
+
 void mm_free(void *ptr)
+{
+    advanced_free(ptr);
+}
+
+void advanced_free(void *ptr)
 {
     // size_t size = GET_SIZE(HDRP(ptr));
     // PUT(HDRP(ptr), PACK(size, 0));
@@ -348,7 +371,13 @@ void mm_free(void *ptr)
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
+
 void *mm_realloc(void *ptr, size_t new_size)
+{
+    return advanced_realloc(ptr, new_size);
+}
+
+void *advanced_realloc(void *ptr, size_t new_size)
 {
     // size_t old_size = (GET_SIZE(HDRP(ptr)) - DSIZE);
     // if(new_size < old_size) old_size = new_size;
@@ -359,10 +388,8 @@ void *mm_realloc(void *ptr, size_t new_size)
     // mm_free(ptr);
     // return new_ptr;
 
-    size_t copy_size = (GET_SIZE(HDRP(ptr)) - DSIZE);
-    if(new_size == copy_size) 
-        return ptr;
-    char* new_ptr;
+    size_t copy_size = GET_SIZE(HDRP(ptr));
+    void* new_ptr;
     if((new_ptr = mm_malloc(new_size)) == NULL)
         return NULL;
     if(new_size < copy_size) copy_size = new_size;
