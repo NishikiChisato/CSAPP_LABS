@@ -75,7 +75,7 @@ team_t team = {
 #define PREV_BLKP(bp)   ((char*)(bp) - GET_SIZE(((char*)(bp) - DSIZE)))
 
 #define GET_PRED(bp)    ((unsigned int*)(bp))
-#define GET_SUCC(bp)    ((unsigned int*)(bp + WSIZE))
+#define GET_SUCC(bp)    ((unsigned int*)((char*)bp + WSIZE))
 
 //free list index
 #define GET_FREE_LIST(num)  (free_list + WSIZE + ((num) * WSIZE))
@@ -123,8 +123,8 @@ void BlockPtr(void* bp)
     int i = 0;
     for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = NEXT_BLKP(cur))
     {
-        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d\n",i++ , cur, FTRP(cur), 
-        GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)));
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d, alloc: %d\n",i++ , cur, FTRP(cur), 
+        GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)), GET_ALLOC(HDRP(cur)));
     }
 }
 
@@ -230,8 +230,10 @@ static void delete_pointer(void* bp)
     }
     else
     {
-        PUT(GET_PRED(bp), GET(GET_SUCC(bp)));
-        PUT(GET_SUCC(bp), GET(GET_PRED(bp)));
+        PUT(GET_SUCC(GET(GET_PRED(bp))), GET(GET_SUCC(bp)));
+        PUT(GET_PRED(GET(GET_SUCC(bp))), GET(GET_PRED(bp)));
+        PUT(GET_PRED(bp), NULL);
+        PUT(GET_SUCC(bp), NULL);
     }
 
 }
@@ -249,9 +251,9 @@ void insert_free_block(void* bp)
     }
     else
     {
-        PUT(GET_SUCC(bp), GET_HEAP_LIST(idx));
+        PUT(GET_SUCC(bp), GET(GET_HEAP_LIST(idx)));        
+        PUT(GET_PRED(bp), NULL);        
         PUT(GET_PRED(GET(GET_HEAP_LIST(idx))), bp);
-        PUT(GET_PRED(bp), NULL);
         PUT(GET_HEAP_LIST(idx), bp);
     }
 }
@@ -280,7 +282,7 @@ static void* coalesce(void* bp)
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));        
-        bp = NEXT_BLKP(bp);        
+        bp = PREV_BLKP(bp);        
     }
     else
     {
@@ -336,6 +338,7 @@ void place(void* bp, size_t asize)
     size_t csize = GET_SIZE(HDRP(bp));
     if((csize - asize) >= 2 * DSIZE)
     {
+        delete_pointer(bp);        
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
@@ -345,9 +348,9 @@ void place(void* bp, size_t asize)
     }
     else
     {
+        delete_pointer(bp);        
         PUT(HDRP(bp), PACK(csize, 1));
         PUT(FTRP(bp), PACK(csize, 1));
-        delete_pointer(bp);
     }
 }
 
@@ -452,6 +455,8 @@ void heap_list_free(void* ptr)
     size_t size = GET_SIZE(HDRP(ptr));
     PUT(HDRP(ptr), PACK(size, 0));
     PUT(FTRP(ptr), PACK(size, 0));
+    PUT(GET_PRED(ptr), NULL);
+    PUT(GET_SUCC(ptr), NULL);
     coalesce(ptr);
 }
 

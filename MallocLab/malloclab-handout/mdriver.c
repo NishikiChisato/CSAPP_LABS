@@ -596,6 +596,7 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
 
     /* Interpret each operation in the trace in order */
     for (i = 0;  i < trace->num_ops;  i++) {
+		printf("%d, %d\n", trace->ops[i].index, trace->ops[i].type);fflush(stdout);
 	index = trace->ops[i].index;
 	size = trace->ops[i].size;
 
@@ -608,7 +609,7 @@ static int eval_mm_valid(trace_t *trace, int tracenum, range_t **ranges)
 		malloc_error(tracenum, i, "mm_malloc failed.");
 		return 0;
 	    }
-	    
+	    printf("p: %p, idx: %d\n", p, index);fflush(stdout);
 	    /* 
 	     * Test the range of the new block for correctness and add it 
 	     * to the range list if OK. The block must be  be aligned properly,
