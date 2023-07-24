@@ -90,6 +90,8 @@ team_t team = {
 
 #define HEAP_SIZE   20
 
+#define BYTE_LIMIT 512
+
 //free list
 static char* free_list;
 //heap list
@@ -131,12 +133,21 @@ void BlockPtr(void* bp)
 void Linklist(void* bp)
 {
     int i = 0;
-    for(void* cur = bp; GET_SIZE(HDRP(cur)) > 0; cur = GET(GET_SUCC(cur)))
+    for(void* cur = bp; cur; cur = GET(GET_SUCC(cur)))
     {
-        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d\n",i++ , cur, FTRP(cur),
-         GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)));
+        printf("i = %d, begin: %p, end: %p, pred: %p, succ: %p, size: %d, alloc: %d\n",i++ , cur, FTRP(cur),
+         GET(GET_PRED(cur)), GET(GET_SUCC(cur)), GET_SIZE(HDRP(cur)), GET_ALLOC(HDRP(cur)));
     }
 }
+
+void HeapPrint(void* bp)
+{
+    for(int i = 0; i < HEAP_SIZE; i ++)
+    {
+        if(GET(GET_HEAP_LIST(i)) != NULL)
+            Linklist(GET(GET_HEAP_LIST(i)));
+    }
+} 
 
 /* 
  * mm_init - initialize the malloc package.
@@ -163,13 +174,14 @@ int mm_init(void)
     if((heap_list = mem_sbrk(WSIZE * (4 + HEAP_SIZE))) == (void*)-1)
         return -1;
     for(int i = 0; i < HEAP_SIZE; i ++)
-        PUT(GET_HEAP_LIST(i), 0);
+        PUT(GET_HEAP_LIST(i), NULL);
     PUT(GET_HEAP_LIST(HEAP_SIZE), 0);
     PUT(GET_HEAP_LIST(HEAP_SIZE + 1), PACK(DSIZE, 1));
     PUT(GET_HEAP_LIST(HEAP_SIZE + 2), PACK(DSIZE, 1));
     PUT(GET_HEAP_LIST(HEAP_SIZE + 3), PACK(0, 1));
 
-
+    if(heap_list_extend_heap(CHUNKSIZE / WSIZE) == NULL)
+        return -1;
 
     return 0;
 }
@@ -184,6 +196,9 @@ static void* heap_list_extend_heap(size_t words)
     //free block header and footer
     PUT(HDRP(bp), PACK(size, 0));
     PUT(FTRP(bp), PACK(size, 0));
+
+    PUT(GET_PRED(bp), NULL);
+    PUT(GET_SUCC(bp), NULL);
     //epilogue header
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1));
     return coalesce(bp);
@@ -220,15 +235,17 @@ static void delete_pointer(void* bp)
     else if(GET(GET_PRED(bp)) == NULL && GET(GET_SUCC(bp)) != NULL)
     {
         PUT(GET_HEAP_LIST(idx), GET(GET_SUCC(bp)));
+        PUT(GET_PRED(GET(GET_SUCC(bp))), NULL);
         PUT(GET_SUCC(bp), NULL);
     }
     //the last element in list
     else if(GET(GET_PRED(bp)) != NULL && GET(GET_SUCC(bp)) == NULL)
     {
         PUT(GET_SUCC(GET(GET_PRED(bp))), NULL);
+        PUT(GET_SUCC(GET(GET_PRED(bp))), NULL);
         PUT(GET_PRED(bp), NULL);
     }
-    else
+    else if(GET(GET_PRED(bp)) != NULL && GET(GET_SUCC(bp)) != NULL)
     {
         PUT(GET_SUCC(GET(GET_PRED(bp))), GET(GET_SUCC(bp)));
         PUT(GET_PRED(GET(GET_SUCC(bp))), GET(GET_PRED(bp)));
@@ -265,7 +282,8 @@ static void* coalesce(void* bp)
     size_t size = GET_SIZE(HDRP(bp));
     if(prev_alloc && next_alloc)
     {
-        insert_free_block(bp);
+        if(GET_ALLOC(HDRP(bp)) == 0)
+            insert_free_block(bp);
         return bp;
     }
     else if(prev_alloc && !next_alloc)
@@ -288,12 +306,13 @@ static void* coalesce(void* bp)
     {
         delete_pointer(PREV_BLKP(bp));
         delete_pointer(NEXT_BLKP(bp));
-        size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+        size += (GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp))));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    insert_free_block(bp);
+    if(GET_ALLOC(HDRP(bp)) == 0) 
+        insert_free_block(bp);
     return bp;
 }
 
@@ -338,13 +357,14 @@ void place(void* bp, size_t asize)
     size_t csize = GET_SIZE(HDRP(bp));
     if((csize - asize) >= 2 * DSIZE)
     {
-        delete_pointer(bp);        
+        delete_pointer(bp);
         PUT(HDRP(bp), PACK(asize, 1));
         PUT(FTRP(bp), PACK(asize, 1));
         bp = NEXT_BLKP(bp);
         PUT(HDRP(bp), PACK(csize - asize, 0));
         PUT(FTRP(bp), PACK(csize - asize, 0));
-        insert_free_block(bp);
+        if(GET_ALLOC(HDRP(bp)) == 0)
+            insert_free_block(bp);
     }
     else
     {
