@@ -90,8 +90,6 @@ team_t team = {
 
 #define HEAP_SIZE   20
 
-#define BYTE_LIMIT 512
-
 //free list
 static char* free_list;
 //heap list
@@ -242,7 +240,7 @@ static void delete_pointer(void* bp)
     else if(GET(GET_PRED(bp)) != NULL && GET(GET_SUCC(bp)) == NULL)
     {
         PUT(GET_SUCC(GET(GET_PRED(bp))), NULL);
-        PUT(GET_SUCC(GET(GET_PRED(bp))), NULL);
+        //PUT(GET_SUCC(GET(GET_PRED(bp))), NULL);
         PUT(GET_PRED(bp), NULL);
     }
     else if(GET(GET_PRED(bp)) != NULL && GET(GET_SUCC(bp)) != NULL)
@@ -430,6 +428,7 @@ void *free_list_malloc(size_t size)
 
         char* cur = bp;
         size_t csize = asize * ENTRY_SIZE;
+        //construct list in allocated area
         while(csize >= asize)
         {
             PUT(HDRP(cur), PACK(asize, 0));
