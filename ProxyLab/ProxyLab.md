@@ -6,8 +6,11 @@
     - [例子](#例子)
     - [调试](#调试)
   - [实验过程](#实验过程)
-    - [Basic](#basic)
-    - [Concurrency](#concurrency)
+    - [Part 1: Basic](#part-1-basic)
+    - [Part 2: Concurrency](#part-2-concurrency)
+      - [简易实现](#简易实现)
+      - [预线程化实现](#预线程化实现)
+    - [Part 3: Cache](#part-3-cache)
 
 
 ## 准备
@@ -135,7 +138,7 @@ curl -v --proxy http://localhost:45806 http://localhost:45807/cgi-bin/adder?50\&
 
 ## 实验过程
 
-### Basic
+### Part 1: Basic
 
 在这一部分，我们需要将浏览器传入给 `proxy` 的报文转发给服务器，具体地：
 
@@ -248,7 +251,7 @@ void doit(int fd)
 
     Rio_readlineb(&client_rio, buf, MAXLINE);
 
-    printf("recived header: %s\n", buf);
+    //printf("recived header: %s\n", buf);
 
     sscanf(buf, "%s %s %s", method, uri, version);
     //ignore the case of characters
@@ -262,9 +265,9 @@ void doit(int fd)
     forwordMessege(forwardBuf, &header, &client_rio);
 
 
-    printf("-----------------------------------------\n");
-    printf("%s\n", forwardBuf);
-    printf("host: %s, port: %s, file: %s\n", header.hostname, header.port, header.filename);
+    //printf("-----------------------------------------\n");
+    //printf("%s\n", forwardBuf);
+    //printf("host: %s, port: %s, file: %s\n", header.hostname, header.port, header.filename);
 
 
     forwardfd = Open_clientfd(header.hostname, header.port);
@@ -376,5 +379,147 @@ void clienterror(int fd, char *cause, char *errnum,
 }
 ```
 
-### Concurrency
+运行结果：
+
+> 注：这里的测试主要是通过判断 `tiny` 直接返回的结果与通过 `proxy` 与 `tiny` 沟通返回的结果是否相同
+
+```bash
+*** Basic ***
+Starting tiny on 1508
+Starting proxy on 7697
+1: home.html
+   Fetching ./tiny/home.html into ./.proxy using the proxy
+   Fetching ./tiny/home.html into ./.noproxy directly from Tiny
+   Comparing the two files
+   Success: Files are identical.
+2: csapp.c
+   Fetching ./tiny/csapp.c into ./.proxy using the proxy
+   Fetching ./tiny/csapp.c into ./.noproxy directly from Tiny
+   Comparing the two files
+   Success: Files are identical.
+3: tiny.c
+   Fetching ./tiny/tiny.c into ./.proxy using the proxy
+   Fetching ./tiny/tiny.c into ./.noproxy directly from Tiny
+   Comparing the two files
+   Success: Files are identical.
+4: godzilla.jpg
+   Fetching ./tiny/godzilla.jpg into ./.proxy using the proxy
+   Fetching ./tiny/godzilla.jpg into ./.noproxy directly from Tiny
+   Comparing the two files
+   Success: Files are identical.
+5: tiny
+   Fetching ./tiny/tiny into ./.proxy using the proxy
+   Fetching ./tiny/tiny into ./.noproxy directly from Tiny
+   Comparing the two files
+   Success: Files are identical.
+Killing tiny and proxy
+basicScore: 40/40
+```
+
+### Part 2: Concurrency
+
+#### 简易实现
+
+并发性这一部分非常简单，我们只需要新建一个 `thread` ，然后在 `thread` 中执行 `doit` 即可，书中有相关代码可以参考
+
+需要改动的代码如下：
+
+```c
+//main
+sem_t mutex;
+int *connfd;
+while(1) {
+    clientlen = sizeof(clientaddr);
+    connfd = Malloc(sizeof (int));
+    P(&mutex);
+    *connfd = Accept(listenfd, (SA*)&clientaddr, &clientlen);
+    V(&mutex);
+    Getnameinfo((SA*)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accept Connection from (%s, %s)\n", hostname, port);
+    Pthread_create(&tid, NULL, thread, connfd);
+}
+
+//thread
+void* thread(void* vargp)
+{
+    int connfd = *(int*)vargp;
+    Pthread_detach(Pthread_self());
+    Free(vargp);
+    doit(connfd);
+    Close(connfd);
+    return NULL;
+}
+```
+
+运行结果：
+
+```bash
+*** Concurrency ***
+Starting tiny on port 20531
+Starting proxy on port 13639
+Starting the blocking NOP server on port 26938
+Trying to fetch a file from the blocking nop-server
+Fetching ./tiny/home.html into ./.noproxy directly from Tiny
+Fetching ./tiny/home.html into ./.proxy using the proxy
+Checking whether the proxy fetch succeeded
+Success: Was able to fetch tiny/home.html from the proxy.
+Killing tiny, proxy, and nop-server
+concurrencyScore: 15/15
+```
+
+#### 预线程化实现
+
+> 如果我们另外实现 `sbuf` 相关的函数的话，需要对 `Makefile` 文件进行改动
+
+预线程化的基本思想是，预先创建一系列的线程，然后服务器监听端口。当有客户端与服务器连接时，服务器会将**已连接描述符**加入到**全局缓冲区**当中
+
+每个预先创建的线程则会等待全局缓冲区当中的内容，一旦缓冲区非空（存在已连接描述符），那么便会有线程取出缓冲区内的描述符，单独与该客户端进行连接
+
+代码实现上非常的简单，书里面也有对应的代码，可以参考
+
+```c
+//main
+sbuf_init(&sbuf, SBUF_SIZE);
+for(int i = 0; i < NTHREAD; i ++) {
+    Pthread_create(&tid, NULL, thread, NULL);
+}
+
+while(1) {
+    clientlen = sizeof(clientaddr);
+    connfd = Accept(listenfd, (SA*)&clientaddr, &clientlen);
+    Getnameinfo((SA*)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
+    printf("Accept Connection from (%s, %s)\n", hostname, port);
+    sbuf_insert(&sbuf, connfd);
+}
+
+//thread
+void* thread(void* vargp)
+{
+    Pthread_detach(Pthread_self());
+    while(1) {
+        int connfd = sbuf_remove(&sbuf);
+        doit(connfd);
+        Close(connfd);
+        return NULL;        
+    }
+}
+```
+
+运行结果：
+
+```bash
+*** Concurrency ***
+Starting tiny on port 7553
+Starting proxy on port 33623
+Starting the blocking NOP server on port 30905
+Trying to fetch a file from the blocking nop-server
+Fetching ./tiny/home.html into ./.noproxy directly from Tiny
+Fetching ./tiny/home.html into ./.proxy using the proxy
+Checking whether the proxy fetch succeeded
+Success: Was able to fetch tiny/home.html from the proxy.
+Killing tiny, proxy, and nop-server
+concurrencyScore: 15/15
+```
+
+### Part 3: Cache
 

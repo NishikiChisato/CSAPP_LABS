@@ -1,11 +1,15 @@
-#include "csapp.h"
 #include <strings.h>
+#include "csapp.h"
+#include "sbuf.h"
 //#include <stdio.h>
 
 /* Recommended max cache and object sizes */
 #define MAX_CACHE_SIZE 1049000
 #define MAX_OBJECT_SIZE 102400
 
+//the number of thread
+#define NTHREAD 16
+#define SBUF_SIZE 32
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
@@ -20,11 +24,15 @@ void prase_url(char* uri, requesthdrs* header);
 void read_requesthdrs(rio_t* rp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
 void forwordMessege(char* buf, requesthdrs* headers, rio_t* rp);
+void* thread(void* vargp);
 
 void sighandler(int sig)
 {
     ;
 }
+
+//golbal variable
+sbuf_t sbuf;
 
 int main(int argc, char* argv [])
 {
@@ -37,18 +45,36 @@ int main(int argc, char* argv [])
     socklen_t clientlen;
     struct sockaddr_storage clientaddr;
     char hostname[MAXLINE], port[MAXLINE];
+    pthread_t tid;
+
     Signal(SIGPIPE, sighandler);
     
     listenfd = Open_listenfd(argv[1]);
+
+    sbuf_init(&sbuf, SBUF_SIZE);
+    for(int i = 0; i < NTHREAD; i ++) {
+        Pthread_create(&tid, NULL, thread, NULL);
+    }
+
     while(1) {
         clientlen = sizeof(clientaddr);
         connfd = Accept(listenfd, (SA*)&clientaddr, &clientlen);
         Getnameinfo((SA*)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE, 0);
         printf("Accept Connection from (%s, %s)\n", hostname, port);
-        doit(connfd);
-        Close(connfd);
+        sbuf_insert(&sbuf, connfd);
     }
     return 0;
+}
+
+void* thread(void* vargp)
+{
+    Pthread_detach(Pthread_self());
+    while(1) {
+        int connfd = sbuf_remove(&sbuf);
+        doit(connfd);
+        Close(connfd);
+        return NULL;        
+    }
 }
 
 void doit(int fd)
@@ -62,7 +88,7 @@ void doit(int fd)
 
     Rio_readlineb(&client_rio, buf, MAXLINE);
 
-    printf("recived header: %s\n", buf);
+    //printf("recived header: %s\n", buf);
 
     sscanf(buf, "%s %s %s", method, uri, version);
     //ignore the case of characters
@@ -76,9 +102,9 @@ void doit(int fd)
     forwordMessege(forwardBuf, &header, &client_rio);
 
 
-    printf("-----------------------------------------\n");
-    printf("%s\n", forwardBuf);
-    printf("host: %s, port: %s, file: %s\n", header.hostname, header.port, header.filename);
+    // printf("-----------------------------------------\n");
+    // printf("%s\n", forwardBuf);
+    // printf("host: %s, port: %s, file: %s\n", header.hostname, header.port, header.filename);
 
 
     forwardfd = Open_clientfd(header.hostname, header.port);
