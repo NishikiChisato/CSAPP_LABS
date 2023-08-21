@@ -2,6 +2,8 @@
 
 本仓库用于记录我 `CSAPP LAB` 的源代码以及相关问题
 
+> 所有实验均已完成
+
 ## In process
 
 * [x] *Data Lab*
@@ -14,7 +16,7 @@
   * [ ] *Performance Lab*
 * [x] *Shell Lab*
 * [x] *Malloc Lab*
-* [ ] *Proxy Lab*
+* [x] *Proxy Lab*
 
 > * *`Architecture Lab(Y86)`* 为 `CSAPP:2e` 的版本，可以只做 *`Architecture Lab`*
 > * *`Buffer Lab(IA32)`* 为 *`Attack Lab`* 的 `32` 位版本，也属于 `CSAPP:2e`，可以只做 *`Attack Lab`*
@@ -29,6 +31,7 @@
 5. 学习了 `LRU` 在 `cache` 当中的实现，了解了 `cache` 的寻址以及碰撞等工作原理，能够有能力编写出降低 `cache` 碰撞的代码
 6. 学习了信号处理函数的使用以及多进程程序避免竞争的办法
 7. 学到内存管理方面的知识，对 `malloc` 和 `free` 的实现以及指针和链表有了更深入的理解，学习了很多 `gdb` 调试的技巧，能够熟练使用 `gdb`
+8. 学到多线程、信号量的应用，理解了多路复用、客户端、预线程化服务器的开发雏形
 
 ## File structure
 
@@ -46,6 +49,8 @@
 │   └── datalab-handout
 ├── MallocLab
 │   └── malloclab-handout
+├── ProxyLab
+│   └── proxylab-handout
 ├── ShellLab
 │   └── shlab-handout
 └── Tar

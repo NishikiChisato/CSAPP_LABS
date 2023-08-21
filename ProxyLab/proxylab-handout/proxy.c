@@ -10,6 +10,10 @@
 //the number of thread
 #define NTHREAD 16
 #define SBUF_SIZE 32
+
+//cache line
+#define CACHELINE 10
+
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:10.0.3) Gecko/20120305 Firefox/10.0.3\r\n";
 
@@ -23,16 +27,82 @@ void doit(int fd);
 void prase_url(char* uri, requesthdrs* header);
 void read_requesthdrs(rio_t* rp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-void forwordMessege(char* buf, requesthdrs* headers, rio_t* rp);
+void forwardMessage(char* buf, requesthdrs* headers, rio_t* rp);
 void* thread(void* vargp);
-
-void sighandler(int sig)
-{
-    ;
-}
+void sighandler(int sig) { ; }
 
 //golbal variable
 sbuf_t sbuf;
+
+typedef struct {
+    char buf[MAX_OBJECT_SIZE];
+    char url[MAXLINE];
+    int size;//cache block size
+    int valid;//1 or 0
+    int timestamp;
+} cacheLine;
+
+typedef struct {
+    cacheLine line[CACHELINE];
+    int readcnt, currentTime;    
+    sem_t mutex, writer;
+} cache_t;
+
+cache_t cache;
+
+void cache_init()
+{
+    cache.readcnt = 0;
+    cache.currentTime = 0;
+    Sem_init(&cache.mutex, 0, 1);
+    Sem_init(&cache.writer, 0, 1);
+    for(int i = 0; i < CACHELINE; i ++) {
+        cache.line[i].valid = 0;
+        cache.line[i].timestamp = 0;
+        cache.line[i].size = 0;
+    }
+}
+
+//return idx in cache if success, -1 on error
+int getCacheIndex(char* url)
+{
+    int ret = -1;
+    for(int i = 0; i < CACHELINE; i ++) {
+        if(cache.line[i].valid && !strcmp(cache.line[i].url, url)) {
+            ret = i;
+        }
+    }
+    return ret;
+}
+
+void cacheWrite(char* buf, char* url, int size)
+{
+    if(size > MAX_OBJECT_SIZE) return;
+    int idx = -1;
+    for(int i = 0; i < CACHELINE; i ++) {
+        if(cache.line[i].valid == 0) {
+            idx = i;
+            break;
+        }
+    }
+    if(idx == -1) {
+        //LRU
+        int mxTime = 0;
+        for(int i = 0; i < CACHELINE; i ++) {
+            if(cache.line[i].valid && cache.currentTime - cache.line[i].timestamp > mxTime) {
+                mxTime = cache.currentTime - cache.line[i].timestamp;
+                idx = i;
+            }
+        }
+    }
+    P(&cache.writer);
+    strcpy(cache.line[idx].buf, buf);
+    strcpy(cache.line[idx].url, url);    
+    cache.line[idx].size = size;
+    cache.line[idx].timestamp = ++cache.currentTime;
+    cache.line[idx].valid = 1;
+    V(&cache.writer);
+}
 
 int main(int argc, char* argv [])
 {
@@ -48,7 +118,7 @@ int main(int argc, char* argv [])
     pthread_t tid;
 
     Signal(SIGPIPE, sighandler);
-    
+    cache_init();
     listenfd = Open_listenfd(argv[1]);
 
     sbuf_init(&sbuf, SBUF_SIZE);
@@ -80,7 +150,7 @@ void* thread(void* vargp)
 void doit(int fd)
 {
     char buf[MAXLINE], method[MAXLINE], uri[MAXLINE], version[MAXLINE];
-    char forwardBuf[MAXLINE];
+    char forwardBuf[MAXLINE], uriBackup[MAXLINE];
     requesthdrs header;
     int forwardfd;
     rio_t client_rio, server_rio;
@@ -91,6 +161,7 @@ void doit(int fd)
     //printf("recived header: %s\n", buf);
 
     sscanf(buf, "%s %s %s", method, uri, version);
+    strcpy(uriBackup, uri);
     //ignore the case of characters
     if(strcasecmp(method, "GET")) {
         clienterror(fd, method, "501", "Not implemented", "Proxy dose not implement this method\n");
@@ -98,8 +169,31 @@ void doit(int fd)
         return;
     }
 
+    int idx = getCacheIndex(uri);
+
+
+    if(idx != -1) {
+        P(&cache.mutex);
+        cache.readcnt++;
+        if(cache.readcnt == 1) 
+            P(&cache.writer);
+        V(&cache.mutex);
+
+        Rio_writen(fd, cache.line[idx].buf, cache.line[idx].size);
+
+        P(&cache.mutex);
+        cache.readcnt--;
+        if(cache.readcnt == 0)
+            V(&cache.writer);
+        V(&cache.mutex);
+
+        printf("Cached\n");
+        return;
+    }
+
+
     prase_url(uri, &header);
-    forwordMessege(forwardBuf, &header, &client_rio);
+    forwardMessage(forwardBuf, &header, &client_rio);
 
 
     // printf("-----------------------------------------\n");
@@ -112,10 +206,16 @@ void doit(int fd)
     Rio_writen(forwardfd, forwardBuf, strlen(forwardBuf));
 
     size_t n;
+    int cacheSize = 0;
+    memset(buf, 0, sizeof buf);
     while((n = Rio_readlineb(&server_rio, forwardBuf, MAXLINE)) != 0) {
         fprintf(stdout, "proxy recived %ld bytes\n", n);
         Rio_writen(fd, forwardBuf, n);
+        strcat(buf, forwardBuf);
+        cacheSize += n;
     }
+
+    cacheWrite(buf, uriBackup, cacheSize);
 
     Close(forwardfd);
 }
@@ -130,7 +230,7 @@ void read_requesthdrs(rio_t* rp)
     return;
 }
 
-void forwordMessege(char* buf, requesthdrs* headers, rio_t* rp)
+void forwardMessage(char* buf, requesthdrs* headers, rio_t* rp)
 {
     char tmp[MAXLINE], getLine[MAXLINE], hostLine[MAXLINE];
     char userAgentLine[MAXLINE], connectionLine[MAXLINE], proxyConnectionLine[MAXLINE];
